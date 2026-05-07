@@ -1,0 +1,22 @@
+PKB datapad patch notes
+
+- Added a new solo datapad module state for the Planet Killing Bomb power-restoration minigame.
+- Moved the prior seismic datapad activity module out of the active datapad pool by setting its active state false during generation.
+- Added pkbControl and powerOutage to the synced client state so the panel cover and datapad can react to outages.
+- During PKB outage phase, active panel modules are covered again and normal panel inputs are blocked until power is restored.
+- Added a simple 8x8 Lua-drawn datapad circuit grid with RGB outputs on the left, receivers on the right, and 4-6 blocked X tiles.
+- Added server handlers for pkb_begin / pkb_hover / pkb_release using the existing addon net channel.
+- Added an outage reset pass for common in-progress modules so they lose partial progress without taking an extra strike.
+- Restoring all three connections clears the outage, regenerates the next grid layout, and starts a new active timer.
+
+Known limitations
+- The PKB drag path is intentionally simple for this test build: each color uses a straight horizontal path across its row.
+- The multiplayer bomb was left unchanged because the datapad terminal currently exists only on the solo bomb UI path.
+- I could not run Garry's Mod in-engine here, so this patch was validated by code inspection only.
+
+
+PKB tectonic drill patch:
+- Slot 6 switched from seismic calibration to PKB tectonic drill.
+- Added 6-digit override code generation based on reactor code and serial positions.
+- Added fatal wire-cut logic and client UI for the drill.
+- Left seismic modules in code/manual for later reuse, but removed from active slot testing.
