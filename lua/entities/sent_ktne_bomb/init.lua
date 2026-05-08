@@ -1,4 +1,4 @@
-﻿AddCSLuaFile("shared.lua")
+AddCSLuaFile("shared.lua")
 AddCSLuaFile("cl_init.lua")
 include("shared.lua")
 
@@ -1033,24 +1033,12 @@ end
 
 function ENT:IsPanelUser(ply)
     if not IsValid(ply) then return false end
-    if ply == self.PanelPlayer then return true end
-    local stored = self:GetPanelPlySID() or ""
-    if stored ~= "" and sid64(ply) == stored then
-        self.PanelPlayer = ply
-        return true
-    end
-    return false
+    return ply == self.PanelPlayer
 end
 
 function ENT:IsManualUser(ply)
     if not IsValid(ply) then return false end
-    if ply == self.ManualPlayer then return true end
-    local stored = self:GetManualPlySID() or ""
-    if stored ~= "" and sid64(ply) == stored then
-        self.ManualPlayer = ply
-        return true
-    end
-    return false
+    return ply == self.ManualPlayer
 end
 
 function ENT:GetPlayerRole(ply)
@@ -1094,6 +1082,46 @@ function ENT:UnassignInvalidPlayers()
         self.ManualPlayer = nil
         self:SetManualPlySID("")
     end
+end
+
+function ENT:ReleasePlayerBySID(sid)
+    sid = tostring(sid or "")
+    if sid == "" then return false end
+
+    local changed = false
+    if tostring(self:GetPanelPlySID() or "") == sid then
+        self.PanelPlayer = nil
+        self:SetPanelPlySID("")
+        changed = true
+    end
+    if tostring(self:GetManualPlySID() or "") == sid then
+        self.ManualPlayer = nil
+        self:SetManualPlySID("")
+        changed = true
+    end
+
+    if tostring(self.DebugTestSID or "") == sid then
+        self.DebugOnePlayerActive = false
+        self.DebugTestRole = nil
+        self.DebugTestSID = nil
+        changed = true
+    end
+
+    return changed
+end
+
+function ENT:ReleasePlayer(ply, opts)
+    local changed = self:ReleasePlayerBySID(sid64(ply))
+    if not changed then return false end
+
+    if IsValid(ply) and not (opts and opts.skipClose) then
+        net.Start("ktne_close_ui_mp")
+            net.WriteEntity(self)
+        net.Send(ply)
+    end
+
+    self:SyncState(true)
+    return true
 end
 
 function ENT:OpenDebugPickerFor(ply)
@@ -1452,6 +1480,9 @@ end
 function ENT:HandlePanelAction(ply, action, data)
     if action == "debug_start_role" then
         self:StartDebugGameFor(ply, tostring((data and data.role) or "panel"))
+        return
+    elseif action == "leave_bomb" then
+        self:ReleasePlayer(ply)
         return
     end
 
@@ -2091,12 +2122,6 @@ function ENT:Think()
     local chatChanged = false
 
     if self:GetGameActive() then
-        if self:GetJoinedCount() <= 0 then
-            self:ResetBomb(false)
-            self:NextThink(nextTick)
-            return true
-        end
-
         self._nextSecondTick = self._nextSecondTick or now
         if now >= self._nextSecondTick then
             local secondTicks = math.max(1, math.floor(now - self._nextSecondTick) + 1)
@@ -2318,6 +2343,10 @@ function ENT:SpawnFunction(ply, tr, class)
     ent:Activate()
     return ent
 end
+
+
+
+
 
 
 

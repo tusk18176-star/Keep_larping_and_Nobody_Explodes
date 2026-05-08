@@ -746,7 +746,10 @@ local function makeFrame(ent)
     closeBtn:SetText("")
     closeBtn:SetSize(36, 36)
     closeBtn:SetPos(frame:GetWide() - 48, 10)
-    closeBtn.DoClick = function() closeFrameForBomb(ent, true) end
+    closeBtn.DoClick = function()
+        sendAction(ent, "leave_bomb")
+        closeFrameForBomb(ent, true)
+    end
     closeBtn.Paint = function(self, w, h)
         paintHoloButton(self, w, h, "X", self:IsHovered() and THEME.danger or THEME.line)
     end
@@ -3312,6 +3315,7 @@ function ENT:Draw()
         draw.SimpleText("Holo-panel styling active. Six live modules installed.", "KTNE_Small", 0, 44, THEME.text, TEXT_ALIGN_CENTER)
     cam.End3D2D()
 end
+
 
 
 

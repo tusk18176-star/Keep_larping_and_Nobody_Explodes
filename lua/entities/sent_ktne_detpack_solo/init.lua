@@ -1,4 +1,4 @@
-﻿AddCSLuaFile("shared.lua")
+AddCSLuaFile("shared.lua")
 AddCSLuaFile("cl_init.lua")
 include("shared.lua")
 
@@ -1049,6 +1049,35 @@ function ENT:UnassignInvalidPlayers()
     end
 end
 
+function ENT:ReleasePlayerBySID(sid)
+    sid = tostring(sid or "")
+    if sid == "" then return false end
+    if tostring(self:GetPanelPlySID() or "") ~= sid and tostring(self:GetManualPlySID() or "") ~= sid then
+        return false
+    end
+
+    self.PanelPlayer = nil
+    self.ManualPlayer = nil
+    self:SetPanelPlySID("")
+    self:SetManualPlySID("")
+    return true
+end
+
+function ENT:ReleasePlayer(ply, opts)
+    local sid = IsValid(ply) and (ply:SteamID64() or "") or ""
+    local changed = self:ReleasePlayerBySID(sid)
+    if not changed then return false end
+
+    if IsValid(ply) and not (opts and opts.skipClose) then
+        net.Start("ktne_close_ui_solo")
+            net.WriteEntity(self)
+        net.Send(ply)
+    end
+
+    self:SyncState(true)
+    return true
+end
+
 function ENT:Use(activator)
     if not IsValid(activator) or not activator:IsPlayer() then return end
     if self.RoundEnding then return end
@@ -1367,6 +1396,11 @@ end
 
 
 function ENT:HandlePanelAction(ply, action, data)
+    if action == "leave_bomb" then
+        self:ReleasePlayer(ply)
+        return
+    end
+
     if not self:GetGameActive() then return end
     if action == "chat_message" then
         if ply ~= self.PanelPlayer and ply ~= self.ManualPlayer then return end
@@ -1995,12 +2029,6 @@ function ENT:Think()
     local chatChanged = false
 
     if self:GetGameActive() then
-        if not IsValid(self.PanelPlayer) then
-            self:FinishRound(false, "The player left. Round canceled.")
-            self:NextThink(nextTick)
-            return true
-        end
-
         self._nextSecondTick = self._nextSecondTick or now
         if now >= self._nextSecondTick then
             local secondTicks = math.max(1, math.floor(now - self._nextSecondTick) + 1)
@@ -2221,6 +2249,9 @@ function ENT:SpawnFunction(ply, tr, class)
     ent:Activate()
     return ent
 end
+
+
+
 
 
 
