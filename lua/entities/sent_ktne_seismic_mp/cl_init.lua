@@ -478,6 +478,20 @@ local KTNE_MOVEMENT_BINDS = {
     ["+walk"] = true, ["-walk"] = true,
 }
 
+local function ktneIsPushToTalkBind(bind)
+    local lower = string.lower(tostring(bind or ""))
+    if lower == "+voicerecord" or lower == "-voicerecord" then return true end
+
+    if input and input.LookupBinding then
+        local pttKey = string.lower(tostring(input.LookupBinding("+voicerecord") or ""))
+        if pttKey ~= "" and (lower == pttKey or lower == "+" .. pttKey or lower == "-" .. pttKey) then
+            return true
+        end
+    end
+
+    return false
+end
+
 local function ktneHasActiveMinigameFrame()
     local anyActive = false
     for ent, fr in pairs(activeFrames) do
@@ -504,8 +518,7 @@ local function ktneSetUiHooksEnabled(enabled)
 
         hook.Add("PlayerBindPress", KTNE_INPUT_HOOK_ID .. "_Bind", function(_, bind)
             if not ktneHasActiveMinigameFrame() then return end
-            local lower = string.lower(tostring(bind or ""))
-            if lower:find("voice", 1, true) or lower:find("talk", 1, true) then return end
+            if ktneIsPushToTalkBind(bind) then return end
             return true
         end)
 
