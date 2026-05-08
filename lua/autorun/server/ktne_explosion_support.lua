@@ -442,7 +442,29 @@ end
 local function applyEmp(ply, ent)
     if not IsValid(ply) or not ply:IsPlayer() then return end
     ply:SetArmor(0)
-    ply:SetNWFloat("KTNE_EmpSlowUntil", CurTime() + 15)
+    ply:EmitSound("ambient/energy/newspark08.wav", 75, 100, 1, CHAN_AUTO)
+
+    IFN.Buffs.Add(ply, {
+        id       = "ktne_emp_slow_run",
+        stat     = "RunSpeed",
+        op       = IFN.BUFF_OP_MULTIPLY,
+        value    = 0.5,
+        priority = IFN.BUFF_PRIORITY_DEBUFF,
+        source   = "ktne_emp",
+        tags     = {"ktne", "debuff", "slow"},
+        duration = 15,
+    })
+    IFN.Buffs.Add(ply, {
+        id       = "ktne_emp_slow_walk",
+        stat     = "WalkSpeed",
+        op       = IFN.BUFF_OP_MULTIPLY,
+        value    = 0.5,
+        priority = IFN.BUFF_PRIORITY_DEBUFF,
+        source   = "ktne_emp",
+        tags     = {"ktne", "debuff", "slow"},
+        duration = 15,
+    })
+
     Support.EmpStates[ply] = {
         attacker = ent,
         interval = 1,
@@ -450,12 +472,20 @@ local function applyEmp(ply, ent)
         nextTick = CurTime() + 1,
         untilTime = CurTime() + 15,
     }
-    ply:EmitSound("ambient/energy/newspark08.wav", 75, 100, 1, CHAN_AUTO)
 end
 
 local function applyNoJump(ply, duration)
     if not IsValid(ply) or not ply:IsPlayer() then return end
-    ply:SetNWFloat("KTNE_NoJumpUntil", math.max(ply:GetNWFloat("KTNE_NoJumpUntil", 0), CurTime() + duration))
+    IFN.Buffs.Add(ply, {
+        id       = "ktne_seismic_nojump",
+        stat     = "JumpPower",
+        op       = IFN.BUFF_OP_SET,
+        value    = 0,
+        priority = IFN.BUFF_PRIORITY_DEBUFF,
+        source   = "ktne_seismic",
+        tags     = {"ktne", "debuff"},
+        duration = duration,
+    })
 end
 
 local function applyDetpackBlast(ent)
@@ -765,7 +795,6 @@ timer.Create("KTNE_ExplosionTick", 0.25, 0, function()
         if not IsValid(ply) then
             Support.EmpStates[ply] = nil
         elseif now >= state.untilTime then
-            ply:SetNWFloat("KTNE_EmpSlowUntil", 0)
             Support.EmpStates[ply] = nil
         elseif now >= state.nextTick then
             state.nextTick = state.nextTick + state.interval
@@ -800,24 +829,9 @@ timer.Create("KTNE_ExplosionTick", 0.25, 0, function()
     end
 end)
 
-hook.Add("SetupMove", "KTNE_ExplosionSupport_SetupMove", function(ply, mv)
-    if ply:GetNWFloat("KTNE_EmpSlowUntil", 0) > CurTime() then
-        mv:SetMaxSpeed(mv:GetMaxSpeed() * 0.5)
-        mv:SetMaxClientSpeed(mv:GetMaxClientSpeed() * 0.5)
-    end
-    if ply:GetNWFloat("KTNE_NoJumpUntil", 0) > CurTime() then
-        mv:SetButtons(bit.band(mv:GetButtons(), bit.bnot(IN_JUMP)))
-        if mv:GetVelocity().z > 0 then
-            mv:SetVelocity(Vector(mv:GetVelocity().x, mv:GetVelocity().y, 0))
-        end
-    end
-end)
-
 hook.Add("PlayerDeath", "KTNE_ExplosionSupport_ClearDebuffs", function(ply)
     Support.BurnStates[ply] = nil
     Support.EmpStates[ply] = nil
-    ply:SetNWFloat("KTNE_EmpSlowUntil", 0)
-    ply:SetNWFloat("KTNE_NoJumpUntil", 0)
 end)
 
 hook.Add("EntityRemoved", "KTNE_ExplosionSupport_Cleanup", function(ent)
