@@ -103,51 +103,13 @@ local function pkbHasRoute(blocked, startPos, endPos)
 end
 
 local function buildPKBState()
-    local rows = {1, 2, 3, 4, 5}
-    table.Shuffle(rows)
-    local colors = {"Red", "Green", "Blue"}
-    local connections = {}
-    for i, color in ipairs(colors) do
-        local row = rows[i]
-        connections[color] = {
-            output = {x = 1, y = row},
-            receiver = {x = PKB_GRID_W, y = row},
-            row = row,
-        }
-    end
-
-    local blocked = {}
-    local blockedCount = math.random(4, 6)
-    local attempts = 0
-    while attempts < 256 do
-        attempts = attempts + 1
-        blocked = {}
-        local innerAttempts = 0
-        while table.Count(blocked) < blockedCount and innerAttempts < 1024 do
-            innerAttempts = innerAttempts + 1
-            local x = math.random(2, PKB_GRID_W - 1)
-            local y = math.random(1, PKB_GRID_H)
-            blocked[pkbKey(x, y)] = true
-        end
-
-        local valid = true
-        for _, color in ipairs(colors) do
-            local conn = connections[color]
-            if not pkbHasRoute(blocked, conn.output, conn.receiver) then
-                valid = false
-                break
-            end
-        end
-        if valid then break end
-    end
-
     return {
-        active = true,
-        phase = "active",
-        timer = math.random(48, 65),
-        colors = colors,
-        connections = connections,
-        blocked = blocked,
+        active = false,
+        phase = "idle",
+        timer = 0,
+        colors = {},
+        connections = {},
+        blocked = {},
         completed = {},
         completedPaths = {},
         draggingColor = nil,
@@ -171,6 +133,9 @@ local function regenPKBLayout(pkb)
     pkb.colors = fresh.colors
     pkb.connections = fresh.connections
     pkb.blocked = fresh.blocked
+    pkb.active = fresh.active
+    pkb.phase = fresh.phase
+    pkb.timer = fresh.timer
     pkb.completed = {}
     pkb.completedPaths = {}
     pkb.draggingColor = nil
