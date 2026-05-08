@@ -96,6 +96,18 @@ local function pkbHasRoute(blocked, startPos, endPos)
     return false
 end
 
+local PKB_LAYOUT_MAX_ATTEMPTS = 16
+local PKB_LAYOUT_MAX_INNER_ATTEMPTS = 256
+
+local function buildPKBFallbackBlocked()
+    local blocked = {}
+    blocked[pkbKey(4, 2)] = true
+    blocked[pkbKey(4, 4)] = true
+    blocked[pkbKey(8, 2)] = true
+    blocked[pkbKey(8, 4)] = true
+    return blocked
+end
+
 local function buildPKBState()
     local rows = {1, 2, 3, 4, 5}
     table.Shuffle(rows)
@@ -110,29 +122,39 @@ local function buildPKBState()
         }
     end
 
-    local blocked = {}
+    local blocked = nil
     local blockedCount = math.random(4, 6)
     local attempts = 0
-    while attempts < 256 do
+    while attempts < PKB_LAYOUT_MAX_ATTEMPTS do
         attempts = attempts + 1
-        blocked = {}
+        local candidate = {}
         local innerAttempts = 0
-        while table.Count(blocked) < blockedCount and innerAttempts < 1024 do
+        while table.Count(candidate) < blockedCount and innerAttempts < PKB_LAYOUT_MAX_INNER_ATTEMPTS do
             innerAttempts = innerAttempts + 1
             local x = math.random(2, PKB_GRID_W - 1)
             local y = math.random(1, PKB_GRID_H)
-            blocked[pkbKey(x, y)] = true
+            candidate[pkbKey(x, y)] = true
         end
 
-        local valid = true
-        for _, color in ipairs(colors) do
-            local conn = connections[color]
-            if not pkbHasRoute(blocked, conn.output, conn.receiver) then
-                valid = false
-                break
+        local valid = table.Count(candidate) >= blockedCount
+        if valid then
+            for _, color in ipairs(colors) do
+                local conn = connections[color]
+                if not pkbHasRoute(candidate, conn.output, conn.receiver) then
+                    valid = false
+                    break
+                end
             end
         end
-        if valid then break end
+
+        if valid then
+            blocked = candidate
+            break
+        end
+    end
+
+    if not blocked then
+        blocked = buildPKBFallbackBlocked()
     end
 
     return {
