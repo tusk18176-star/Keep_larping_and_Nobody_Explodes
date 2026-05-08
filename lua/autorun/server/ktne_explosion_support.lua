@@ -39,7 +39,7 @@ local PROFILES = {
     ABBERANT = {
         mode = "inevitable",
         id = "abberant",
-        radius = 500 * METER_TO_UNITS,
+        radius = 250 * METER_TO_UNITS,
         duration = 90,
         startSound = "ambient/gas/steam2.wav",
         finalSound = "ambient/explosions/explode_8.wav",
@@ -163,6 +163,7 @@ local function isPlayerAffectedByZoneRule(ent, ply, profile)
     local zones = getZonesForCurrentMap()
     if not zones or not IsValid(ent) or not IsValid(ply) then return nil end
 
+    local mapName = normalizeMapName(game.GetMap())
     local entZone = getZoneIdForPos(ent:GetPos())
     if not entZone then
         return nil
@@ -174,7 +175,16 @@ local function isPlayerAffectedByZoneRule(ent, ply, profile)
     end
 
     if profile.id == "pkb" then
-        return entZone == plyZone
+        if entZone ~= plyZone then
+            return false
+        end
+
+        if mapName == "rp_anaxes_ifn_v7" then
+            local radius = metersToUnits(400)
+            return ent:GetPos():DistToSqr(ply:WorldSpaceCenter()) <= (radius * radius)
+        end
+
+        return true
     end
 
     if profile.id == "abberant" then
