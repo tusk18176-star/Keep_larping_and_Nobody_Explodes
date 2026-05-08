@@ -2186,9 +2186,10 @@ net.Receive("ktne_action_mp", function(len, ply)
 end)
 
 function ENT:SyncState(force, syncFlags)
-    if not force and self.LastSync > CurTime() then return end
-    self.LastSync = CurTime() + 0.08
     syncFlags = syncFlags or {}
+    local bypassThrottle = syncFlags.bypassThrottle == true
+    if not bypassThrottle and self.LastSync > CurTime() then return end
+    self.LastSync = CurTime() + 0.08
     local includeStatic = syncFlags.includeStatic == true
 
     local targets = {}
