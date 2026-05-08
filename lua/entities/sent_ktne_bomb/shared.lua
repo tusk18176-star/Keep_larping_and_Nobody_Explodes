@@ -1,7 +1,7 @@
 ENT.Type = "anim"
 ENT.Base = "base_anim"
 ENT.PrintName = "KTNE Bomb"
-ENT.Author = "OpenAI"
+ENT.Author = ""
 ENT.Category = "Minigames"
 ENT.Spawnable = false
 ENT.AdminOnly = true

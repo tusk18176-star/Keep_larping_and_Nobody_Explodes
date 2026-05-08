@@ -1,7 +1,7 @@
 ENT.Type = "anim"
 ENT.Base = "base_anim"
 ENT.PrintName = "EMP Bomb (Single Player)"
-ENT.Author = "OpenAI"
+ENT.Author = ""
 ENT.Category = "Minigames"
 ENT.Spawnable = true
 ENT.AdminOnly = false

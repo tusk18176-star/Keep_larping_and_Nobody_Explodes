@@ -1295,18 +1295,6 @@ function ENT:OpenUIFor(ply)
     if not IsValid(ply) then return end
     self:TouchPlayerActivity(ply)
     local role = self:GetPlayerRole(ply)
-    if math.random(1, 100) == 1 then
-        self:PushChatEntry("dev", "SYSTEM", [[Addon made by Tusk
-
-Thank you to the Playtesters who helped with playtesting during devolpment!
--Jameson
--Nice
--DinoNuggs
--Esk
-
-Addon Funded by the Chipkittle Family
-Thank you for playing! :)]])
-    end
     net.Start("ktne_open_ui_mp")
         net.WriteEntity(self)
         net.WriteString(role)
