@@ -32,7 +32,7 @@ hook.Add("HUDPaint", "KTNE_InevitableWarningHUD", function()
     local w, h = ScrW(), ScrH()
     local boxW, boxH = math.min(620, w - 60), 118
     local x = (w - boxW) * 0.5
-    local y = h - boxH - 42
+    local y = h - boxH - 64
     local duration = INEVITABLE_DURATIONS[mode] or 90
     local darkenFrac = math.Clamp((timeLeft - 15) / math.max(duration - 15, 1), 0, 1)
     local redValue = math.floor(Lerp(darkenFrac, 0, 140))

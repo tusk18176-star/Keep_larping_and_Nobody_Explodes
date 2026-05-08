@@ -556,11 +556,31 @@ local function ktneSetUiHooksEnabled(enabled)
             end
             cmd:SetButtons(buttons)
         end)
+
+        hook.Add("SetupMove", KTNE_INPUT_HOOK_ID .. "_SetupMove", function(ply, mv, cmd)
+            if ply ~= LocalPlayer() then return end
+            if not ktneHasActiveMinigameFrame() then return end
+            mv:SetForwardSpeed(0)
+            mv:SetSideSpeed(0)
+            mv:SetUpSpeed(0)
+            local buttons = mv:GetButtons()
+            for _, button in ipairs(KTNE_MOVE_BUTTONS) do
+                buttons = bit.band(buttons, bit.bnot(button))
+            end
+            mv:SetButtons(buttons)
+            if cmd then
+                cmd:SetForwardMove(0)
+                cmd:SetSideMove(0)
+                cmd:SetUpMove(0)
+                cmd:SetButtons(buttons)
+            end
+        end)
     else
 
         hook.Remove("PlayerBindPress", KTNE_INPUT_HOOK_ID .. "_Bind")
         hook.Remove("OnContextMenuOpen", KTNE_INPUT_HOOK_ID .. "_ContextBlock")
         hook.Remove("CreateMove", KTNE_INPUT_HOOK_ID .. "_Move")
+        hook.Remove("SetupMove", KTNE_INPUT_HOOK_ID .. "_SetupMove")
     end
 end
 
@@ -604,6 +624,7 @@ local function openChatComposer(frame)
     composer:SetSize(420, 136)
     composer:Center()
     composer:MakePopup()
+    composer:SetMouseInputEnabled(true)
     composer:SetKeyboardInputEnabled(true)
     composer.Paint = function(self, w, h)
         draw.RoundedBox(8, 0, 0, w, h, Color(6, 16, 24, 250))
@@ -621,6 +642,7 @@ local function openChatComposer(frame)
     entry:SetPos(16, 40)
     entry:SetSize(388, 32)
     entry:SetFont("KTNE_Body")
+    entry:SetEditable(true)
     entry:SetTextColor(Color(220, 240, 248))
     entry:SetCursorColor(THEME.line)
     entry:SetPlaceholderText("Type a message...")
@@ -673,6 +695,11 @@ local function openChatComposer(frame)
     composer.Entry = entry
     frame._chatComposer = composer
     entry:RequestFocus()
+    timer.Simple(0, function()
+        if IsValid(entry) then
+            entry:RequestFocus()
+        end
+    end)
 end
 
 local function makeFrame(ent)
@@ -3189,9 +3216,10 @@ function ENT:Draw()
         draw.SimpleText(title, "KTNE_Title", 0, -46, THEME.title, TEXT_ALIGN_CENTER)
         local line1 = self:GetGameActive() and ("Time: " .. self:GetTimeRemaining() .. "s") or "Use to start bomb"
         local line2 = "Player: " .. (((self:GetPanelPlySID() ~= "") and "1/1" or "0/1"))
+        local payloadLabel = self:GetNWBool("KTNE_DebugOnePlayer", false) and "Training Bomb" or "Live Payload"
         draw.SimpleText(line1, "KTNE_Body", 0, -10, THEME.amber, TEXT_ALIGN_CENTER)
         draw.SimpleText(line2, "KTNE_Body", 0, 18, Color(132, 224, 255), TEXT_ALIGN_CENTER)
-        draw.SimpleText("Holo-panel styling active. Single-player defusal link online.", "KTNE_Small", 0, 44, THEME.text, TEXT_ALIGN_CENTER)
+        draw.SimpleText(payloadLabel, "KTNE_Small", 0, 44, THEME.text, TEXT_ALIGN_CENTER)
     cam.End3D2D()
 end
 

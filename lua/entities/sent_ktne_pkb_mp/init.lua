@@ -1374,6 +1374,7 @@ function ENT:PushChatEntry(kind, speaker, text)
     while #self.ChatLog > 80 do
         table.remove(self.ChatLog, 1)
     end
+    self._chatDirty = true
 end
 
 function ENT:GetChatAckKey(ply)
@@ -2291,6 +2292,8 @@ end)
 
 function ENT:SyncState(force, syncFlags)
     syncFlags = syncFlags or {}
+    local sendChat = syncFlags.chat == true or self._chatDirty == true
+    if sendChat then syncFlags.chat = true end
     local bypassThrottle = syncFlags.bypassThrottle == true
     if not bypassThrottle and self.LastSync > CurTime() then return end
     self.LastSync = CurTime() + 0.08
@@ -2308,6 +2311,10 @@ function ENT:SyncState(force, syncFlags)
             net.WriteString(role)
             net.WriteTable(self:GetClientStateFor(role, includeStatic, syncFlags, ply))
         net.Send(ply)
+    end
+
+    if sendChat then
+        self._chatDirty = false
     end
 end
 
@@ -2540,6 +2547,8 @@ function ENT:SpawnFunction(ply, tr, class)
     ent:Activate()
     return ent
 end
+
+
 
 
 

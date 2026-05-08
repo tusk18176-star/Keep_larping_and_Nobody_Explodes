@@ -52,6 +52,8 @@ local function formatChatTimeRemaining(t)
     return string.format("%d:%02d", m, s)
 end
 
+local DEFAULT_START_TIME = 300
+
 
 local function buildSeismicState()
     local count = math.random(1, 5)
@@ -566,9 +568,34 @@ local function buildMinesModule(serial)
         lastThreeSum = lastThree,
     }
 end
+function ENT:SanitizeActionData(action, data)
+    if not istable(data) then return {} end
 
+    local safe = {}
+    if data.index ~= nil then safe.index = clampInt(data.index, 0, 64, 0) end
+    if data.x ~= nil then safe.x = clampInt(data.x, 0, 64, 0) end
+    if data.y ~= nil then safe.y = clampInt(data.y, 0, 64, 0) end
+    if data.seq ~= nil then safe.seq = clampInt(data.seq, 0, 1000000, 0) end
+    if data.key ~= nil then safe.key = clampInt(data.key, 0, 64, 0) end
+    if data.value ~= nil then safe.value = clampInt(data.value, 0, 999, 0) end
+    if data.delta ~= nil then safe.delta = clampInt(data.delta, -999, 999, 0) end
+    if data.holding ~= nil then safe.holding = data.holding == true end
 
-
+    if data.text ~= nil then
+        safe.text = string.sub(tostring(data.text or ""):gsub("[%c]+", " "), 1, 256)
+    end
+    if data.make ~= nil then
+        safe.make = string.sub(string.upper(tostring(data.make or "")), 1, 32)
+    end
+    if data.role ~= nil then
+        local role = tostring(data.role or "")
+        safe.role = role == "manual" and "manual" or "panel"
+    end
+    if data.channel ~= nil then
+        local channel = tostring(data.channel or "")
+        safe.channel = channel == "exhaust" and "exhaust" or "coolant"
+    end
+    if data.code ~= nil then
         safe.code = string.sub(tostring(data.code or ""), 1, 32)
     end
     if data.color ~= nil then safe.color = string.sub(tostring(data.color or ""), 1, 32) end
@@ -666,6 +693,7 @@ function ENT:PushChatEntry(kind, speaker, text)
     while #self.ChatLog > 80 do
         table.remove(self.ChatLog, 1)
     end
+    self._chatDirty = true
 end
 
 function ENT:GetChatAckKey(ply)
@@ -810,18 +838,24 @@ function ENT:NotifyPlayers(msg)
     self:PushChatEntry("system", "SYSTEM", msg)
 end
 
+function ENT:GetConfiguredStartTime()
+    local selected = self.KTNESelectedStartTime or self:GetNWInt("KTNE_SelectedStartTime", DEFAULT_START_TIME)
+    return math.Clamp(math.floor(tonumber(selected) or DEFAULT_START_TIME), 60, 480)
+end
+
 function ENT:StartGame()
     self.ChatLog = {}
     self.ChatSeq = 0
     self._loggedSolved = {}
     self:GenerateModules()
     self:SetGameActive(true)
-    self:SetTimeRemaining(300)
+    local startTime = self:GetConfiguredStartTime()
+    self:SetTimeRemaining(startTime)
     self:SetStrikes(0)
     self:ClearRoundFlags()
     self._nextSecondTick = CurTime() + 1
     self._nextIdleSync = CurTime() + 1
-    self:NotifyPlayers("Bomb started. Defuse all visible modules before the timer reaches zero.")
+    self:NotifyPlayers("Bomb started. Defuse all visible modules before the timer reaches zero. Current timer: " .. formatChatTimeRemaining(startTime) .. ".")
     self:OpenUIFor(self.PanelPlayer)
     self:OpenUIFor(self.ManualPlayer)
     self:SyncState(true)
@@ -1580,6 +1614,8 @@ end)
 
 function ENT:SyncState(force, syncFlags)
     syncFlags = syncFlags or {}
+    local sendChat = syncFlags.chat == true or self._chatDirty == true
+    if sendChat then syncFlags.chat = true end
     local bypassThrottle = syncFlags.bypassThrottle == true
     if not bypassThrottle and self.LastSync > CurTime() then return end
     self.LastSync = CurTime() + 0.08
@@ -1597,6 +1633,10 @@ function ENT:SyncState(force, syncFlags)
             net.WriteString(role)
             net.WriteTable(self:GetClientStateFor(role, includeStatic, syncFlags, ply))
         net.Send(ply)
+    end
+
+    if sendChat then
+        self._chatDirty = false
     end
 end
 
@@ -1825,10 +1865,19 @@ function ENT:SpawnFunction(ply, tr, class)
     if not tr.Hit then return end
     local ent = ents.Create(class)
     ent:SetPos(tr.HitPos + tr.HitNormal * 18)
+    if IsValid(ply) then
+        ent:SetCreator(ply)
+        ent.KTNESpawnerSID = tostring(ply:SteamID64() or "")
+        ent:SetNWString("KTNE_SpawnerSID", ent.KTNESpawnerSID)
+    end
+    ent.KTNESelectedStartTime = DEFAULT_START_TIME
+    ent:SetNWInt("KTNE_SelectedStartTime", DEFAULT_START_TIME)
     ent:Spawn()
     ent:Activate()
     return ent
 end
+
+
 
 
 

@@ -586,11 +586,31 @@ local function ktneSetUiHooksEnabled(enabled)
             end
             cmd:SetButtons(buttons)
         end)
+
+        hook.Add("SetupMove", KTNE_INPUT_HOOK_ID .. "_SetupMove", function(ply, mv, cmd)
+            if ply ~= LocalPlayer() then return end
+            if not ktneHasActiveMinigameFrame() then return end
+            mv:SetForwardSpeed(0)
+            mv:SetSideSpeed(0)
+            mv:SetUpSpeed(0)
+            local buttons = mv:GetButtons()
+            for _, button in ipairs(KTNE_MOVE_BUTTONS) do
+                buttons = bit.band(buttons, bit.bnot(button))
+            end
+            mv:SetButtons(buttons)
+            if cmd then
+                cmd:SetForwardMove(0)
+                cmd:SetSideMove(0)
+                cmd:SetUpMove(0)
+                cmd:SetButtons(buttons)
+            end
+        end)
     else
 
         hook.Remove("PlayerBindPress", KTNE_INPUT_HOOK_ID .. "_Bind")
         hook.Remove("OnContextMenuOpen", KTNE_INPUT_HOOK_ID .. "_ContextBlock")
         hook.Remove("CreateMove", KTNE_INPUT_HOOK_ID .. "_Move")
+        hook.Remove("SetupMove", KTNE_INPUT_HOOK_ID .. "_SetupMove")
     end
 end
 
@@ -676,6 +696,7 @@ local function openChatComposer(frame)
     composer:SetSize(420, 136)
     composer:Center()
     composer:MakePopup()
+    composer:SetMouseInputEnabled(true)
     composer:SetKeyboardInputEnabled(true)
     composer.Paint = function(self, w, h)
         draw.RoundedBox(8, 0, 0, w, h, Color(6, 16, 24, 250))
@@ -693,6 +714,7 @@ local function openChatComposer(frame)
     entry:SetPos(16, 40)
     entry:SetSize(388, 32)
     entry:SetFont("KTNE_Body")
+    entry:SetEditable(true)
     entry:SetTextColor(Color(220, 240, 248))
     entry:SetCursorColor(THEME.line)
     entry:SetPlaceholderText("Type a message...")
@@ -745,6 +767,64 @@ local function openChatComposer(frame)
     composer.Entry = entry
     frame._chatComposer = composer
     entry:RequestFocus()
+    timer.Simple(0, function()
+        if IsValid(entry) then
+            entry:RequestFocus()
+        end
+    end)
+end
+
+local function setInlineEntryFocus(frame, entry, focused)
+    if not (IsValid(frame) and IsValid(entry)) then return end
+    if entry._ktneInlineFocused == focused then return end
+    entry._ktneInlineFocused = focused
+    local count = tonumber(frame._ktneInlineFocusCount or 0) or 0
+    count = count + (focused and 1 or -1)
+    frame._ktneInlineFocusCount = math.max(0, count)
+    if not IsValid(frame._chatComposer) then
+        frame:SetKeyboardInputEnabled(frame._ktneInlineFocusCount > 0)
+    end
+end
+
+local function wireInlineCodeEntry(frame, entry, submit)
+    if not (IsValid(frame) and IsValid(entry)) then return end
+    entry:SetEditable(true)
+    entry:SetMouseInputEnabled(true)
+    entry.OnMousePressed = function(self, mousecode)
+        if mousecode ~= MOUSE_LEFT then return end
+        if IsValid(frame) and not IsValid(frame._chatComposer) then
+            frame:SetKeyboardInputEnabled(true)
+        end
+        setInlineEntryFocus(frame, self, true)
+        self:RequestFocus()
+        timer.Simple(0, function()
+            if IsValid(self) then
+                self:RequestFocus()
+                self:SetCaretPos(string.len(self:GetValue() or ""))
+            end
+        end)
+    end
+    entry.OnGetFocus = function(self)
+        setInlineEntryFocus(frame, self, true)
+        timer.Simple(0, function()
+            if IsValid(self) then
+                self:RequestFocus()
+            end
+        end)
+    end
+    entry.OnLoseFocus = function(self)
+        setInlineEntryFocus(frame, self, false)
+        timer.Simple(0, function()
+            if IsValid(frame) and not IsValid(frame._chatComposer) and (tonumber(frame._ktneInlineFocusCount or 0) or 0) <= 0 then
+                frame:SetKeyboardInputEnabled(false)
+            end
+        end)
+    end
+    entry.OnEnter = function(self)
+        if isfunction(submit) then
+            submit(self)
+        end
+    end
 end
 
 local function makeFrame(ent)
@@ -1690,6 +1770,11 @@ end
     frame.ReactorEntry:SetUpdateOnType(false)
     frame.ReactorEntry:SetText("")
     frame.ReactorEntry:SetPlaceholderText("ENTER 4-LETTER CODE")
+    wireInlineCodeEntry(frame, frame.ReactorEntry, function()
+        if not IsValid(frame._ent) then return end
+        local code = frame.ReactorEntry:GetValue() or ""
+        sendAction(frame._ent, "reactor_code", {code = code})
+    end)
 
     frame.ReactorSubmit = vgui.Create("DButton", frame.ReactorSection)
     frame.ReactorSubmit:SetText("")
@@ -1806,6 +1891,11 @@ frame.DrillEntry:SetFont("KTNE_SubTitle")
 frame.DrillEntry:SetUpdateOnType(false)
 frame.DrillEntry:SetText("")
 frame.DrillEntry:SetPlaceholderText("ENTER 6-DIGIT CODE")
+wireInlineCodeEntry(frame, frame.DrillEntry, function()
+    if not IsValid(frame._ent) then return end
+    local code = frame.DrillEntry:GetValue() or ""
+    sendAction(frame._ent, "drill_code", {code = code})
+end)
 
 frame.DrillSubmit = vgui.Create("DButton", frame.DrillSection)
 frame.DrillSubmit:SetText("")
@@ -3353,9 +3443,10 @@ function ENT:Draw()
         draw.SimpleText(title, "KTNE_Title", 0, -46, THEME.title, TEXT_ALIGN_CENTER)
         local line1 = self:GetGameActive() and ("Time: " .. self:GetTimeRemaining() .. "s") or "Use to join"
         local line2 = "Players: " .. (((self:GetPanelPlySID() ~= "") and 1 or 0) + ((self:GetManualPlySID() ~= "") and 1 or 0)) .. "/2"
+        local payloadLabel = self:GetNWBool("KTNE_DebugOnePlayer", false) and "Training Bomb" or "Live Payload"
         draw.SimpleText(line1, "KTNE_Body", 0, -10, THEME.amber, TEXT_ALIGN_CENTER)
         draw.SimpleText(line2, "KTNE_Body", 0, 18, Color(132, 224, 255), TEXT_ALIGN_CENTER)
-        draw.SimpleText("Holo-panel styling active. Multiplayer defusal link online.", "KTNE_Small", 0, 44, THEME.text, TEXT_ALIGN_CENTER)
+        draw.SimpleText(payloadLabel, "KTNE_Small", 0, 44, THEME.text, TEXT_ALIGN_CENTER)
     cam.End3D2D()
 end
 

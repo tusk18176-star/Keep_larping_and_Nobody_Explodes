@@ -52,6 +52,8 @@ local function formatChatTimeRemaining(t)
     return string.format("%d:%02d", m, s)
 end
 
+local DEFAULT_START_TIME = 165
+
 
 local function buildSeismicState()
     local count = math.random(1, 5)
@@ -1218,6 +1220,7 @@ function ENT:PushChatEntry(kind, speaker, text)
     while #self.ChatLog > 80 do
         table.remove(self.ChatLog, 1)
     end
+    self._chatDirty = true
 end
 
 function ENT:GetChatAckKey(ply)
@@ -1362,18 +1365,24 @@ function ENT:NotifyPlayers(msg)
     self:PushChatEntry("system", "SYSTEM", msg)
 end
 
+function ENT:GetConfiguredStartTime()
+    local selected = self.KTNESelectedStartTime or self:GetNWInt("KTNE_SelectedStartTime", DEFAULT_START_TIME)
+    return math.Clamp(math.floor(tonumber(selected) or DEFAULT_START_TIME), 60, 480)
+end
+
 function ENT:StartGame()
     self.ChatLog = {}
     self.ChatSeq = 0
     self._loggedSolved = {}
     self:GenerateModules()
     self:SetGameActive(true)
-    self:SetTimeRemaining(165)
+    local startTime = self:GetConfiguredStartTime()
+    self:SetTimeRemaining(startTime)
     self:SetStrikes(0)
     self:ClearRoundFlags()
     self._nextSecondTick = CurTime() + 1
     self._nextIdleSync = CurTime() + 1
-    self:NotifyPlayers("Incendiary single-player bomb started. Defuse all five modules before the 2:45 timer expires.")
+    self:NotifyPlayers("Incendiary single-player bomb started. Defuse all five modules before the " .. formatChatTimeRemaining(startTime) .. " timer expires.")
     self:OpenUIFor(self.PanelPlayer)
     
     self:SyncState(true)
@@ -2130,6 +2139,8 @@ end)
 
 function ENT:SyncState(force, syncFlags)
     syncFlags = syncFlags or {}
+    local sendChat = syncFlags.chat == true or self._chatDirty == true
+    if sendChat then syncFlags.chat = true end
     local bypassThrottle = syncFlags.bypassThrottle == true
     if not bypassThrottle and self.LastSync > CurTime() then return end
     self.LastSync = CurTime() + 0.08
@@ -2147,6 +2158,10 @@ function ENT:SyncState(force, syncFlags)
             net.WriteString(role)
             net.WriteTable(self:GetClientStateFor(role, includeStatic, syncFlags, ply))
         net.Send(ply)
+    end
+
+    if sendChat then
+        self._chatDirty = false
     end
 end
 
@@ -2374,10 +2389,19 @@ function ENT:SpawnFunction(ply, tr, class)
     if not tr.Hit then return end
     local ent = ents.Create(class)
     ent:SetPos(tr.HitPos + tr.HitNormal * 18)
+    if IsValid(ply) then
+        ent:SetCreator(ply)
+        ent.KTNESpawnerSID = tostring(ply:SteamID64() or "")
+        ent:SetNWString("KTNE_SpawnerSID", ent.KTNESpawnerSID)
+    end
+    ent.KTNESelectedStartTime = DEFAULT_START_TIME
+    ent:SetNWInt("KTNE_SelectedStartTime", DEFAULT_START_TIME)
     ent:Spawn()
     ent:Activate()
     return ent
 end
+
+
 
 
 
