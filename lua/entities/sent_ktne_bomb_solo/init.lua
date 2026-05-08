@@ -1253,6 +1253,7 @@ function ENT:GetClientStateFor(role, includeStatic, syncFlags)
     syncFlags = syncFlags or {}
     local includeDynamic = includeStatic or syncFlags.dynamic == true
     local includeChat = includeStatic or syncFlags.chat == true
+    local includeManual = includeStatic or syncFlags.includeManual == true
     local state = {
         serial = self.Serial,
         make = self.MakeName,
@@ -1298,7 +1299,7 @@ function ENT:GetClientStateFor(role, includeStatic, syncFlags)
     end
 
     local function attachManual()
-        if includeStatic then
+        if includeManual then
             state.manual = deepCopy(self.ManualData)
         end
         state.moduleStatus = {
@@ -2099,6 +2100,7 @@ function ENT:SyncState(force, syncFlags)
     if not force and self.LastSync > CurTime() then return end
     self.LastSync = CurTime() + 0.08
     syncFlags = syncFlags or {}
+    local includeStatic = syncFlags.includeStatic == true
 
     local targets = {}
     if IsValid(self.PanelPlayer) then table.insert(targets, self.PanelPlayer) end
@@ -2110,7 +2112,7 @@ function ENT:SyncState(force, syncFlags)
         net.Start("ktne_sync_state_solo")
             net.WriteEntity(self)
             net.WriteString(role)
-            net.WriteTable(self:GetClientStateFor(role, force == true, syncFlags))
+            net.WriteTable(self:GetClientStateFor(role, includeStatic, syncFlags))
         net.Send(ply)
     end
 end
