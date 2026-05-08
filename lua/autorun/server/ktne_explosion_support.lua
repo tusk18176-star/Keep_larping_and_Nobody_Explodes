@@ -41,7 +41,6 @@ local PROFILES = {
         id = "abberant",
         radius = 500 * METER_TO_UNITS,
         duration = 90,
-        sirenSound = "music/hl2_song3.mp3",
         startSound = "ambient/gas/steam2.wav",
         finalSound = "ambient/explosions/explode_8.wav",
         shakeDuration = 5,
@@ -53,8 +52,6 @@ local PROFILES = {
         id = "pkb",
         radius = math.huge,
         duration = 120,
-        sirenSound = "music/hl2_song20_submix0.mp3",
-        secondarySirenSound = "music/radio1.mp3",
         startSound = "physics/concrete/boulder_impact_hard4.wav",
         startSoundRepeats = 10,
         startSoundInterval = 0.5,
@@ -579,6 +576,13 @@ end
 
 local function updatePlayerSirenPatches(ent, state)
     state.playerSirenPatches = state.playerSirenPatches or {}
+    if not state.profile.sirenSound or state.profile.sirenSound == "" then
+        for ply, sirenState in pairs(state.playerSirenPatches) do
+            stopPlayerSirenState(sirenState)
+            state.playerSirenPatches[ply] = nil
+        end
+        return
+    end
     local now = CurTime()
     local targetPlayers = getAffectedPlayersForState(ent, state)
     local shouldHear = {}

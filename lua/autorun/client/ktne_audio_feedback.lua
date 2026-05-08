@@ -9,18 +9,10 @@ local DEFUSED_FADE_TIMER = "KTNE_ClientAudio_DefusedFade"
 local DEFUSED_SOUND = "music/hl1_song25_remix3.mp3"
 local MODULE_SOLVED_SOUND = "ifn_keypad/success.ogg"
 local STRIKE_SOUND = "ifn_keypad/whirr.ogg"
-local PKB_THEME_CVAR = CreateClientConVar("ktne_pkb_defusal_theme", "music/hl1_song17.mp3", true, false, "Defusal theme sound path for PKB bombs.")
-local ABBERANT_THEME_CVAR = CreateClientConVar("ktne_abberant_defusal_theme", "music/hl1_song10.mp3", true, false, "Defusal theme sound path for Abberant bombs.")
 
 Audio.Theme = Audio.Theme or {}
 
 function Audio.GetThemeSound(makeName)
-    local make = string.upper(tostring(makeName or ""))
-    if make == "PKB" then
-        return PKB_THEME_CVAR:GetString()
-    elseif make == "ABBERANT" then
-        return ABBERANT_THEME_CVAR:GetString()
-    end
     return ""
 end
 
@@ -61,10 +53,11 @@ end
 
 function Audio.StartTheme(ent, soundPath, opts)
     opts = opts or {}
-    if not IsValid(ent) or not soundPath or soundPath == "" then return end
+    if not IsValid(ent) then return end
     if Audio.Theme.ent == ent and Audio.Theme.soundPath == soundPath then return end
 
     Audio.StopTheme()
+    if not soundPath or soundPath == "" then return end
 
     local targetVolume = tonumber(opts.volume or 0.65) or 0.65
     local fadeIn = tonumber(opts.fadeIn or 0) or 0
