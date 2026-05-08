@@ -425,6 +425,51 @@ local function sendAction(ent, action, data, minInterval, dedupeKey)
     net.SendToServer()
 end
 
+local function mergeChatLog(prevLog, incomingLog)
+    if incomingLog == nil then
+        return prevLog or {}, nil
+    end
+    prevLog = istable(prevLog) and prevLog or {}
+    incomingLog = istable(incomingLog) and incomingLog or {}
+
+    local merged = {}
+    local bySeq = {}
+    local order = {}
+    for _, entry in ipairs(prevLog) do
+        local seq = math.floor(tonumber(entry and entry.seq or 0) or 0)
+        if seq > 0 and not bySeq[seq] then
+            bySeq[seq] = table.Copy(entry)
+            order[#order + 1] = seq
+        end
+    end
+
+    local highestSeq = 0
+    for _, entry in ipairs(incomingLog) do
+        local seq = math.floor(tonumber(entry and entry.seq or 0) or 0)
+        if seq > highestSeq then highestSeq = seq end
+        if seq > 0 then
+            if not bySeq[seq] then
+                order[#order + 1] = seq
+            end
+            bySeq[seq] = table.Copy(entry)
+        end
+    end
+
+    table.sort(order)
+    for _, seq in ipairs(order) do
+        local entry = bySeq[seq]
+        if entry then
+            merged[#merged + 1] = entry
+        end
+    end
+
+    while #merged > 80 do
+        table.remove(merged, 1)
+    end
+
+    return merged, highestSeq
+end
+
 local colorMap = {
     Red = Color(185, 70, 70),
     Blue = Color(70, 110, 190),
@@ -3222,11 +3267,13 @@ local function applyState(ent, role, state, isOpen)
 
     local prevState = frame._state or {}
     local nextState = state or {}
-    for _, key in ipairs({"manual", "moduleStatus", "modules", "activeSlots", "chatLog", "radioactiveSeal", "seismicControl", "pkbControl"}) do
+    for _, key in ipairs({"manual", "moduleStatus", "modules", "activeSlots", "radioactiveSeal", "seismicControl", "pkbControl"}) do
         if nextState[key] == nil and prevState[key] ~= nil then
             nextState[key] = prevState[key]
         end
     end
+    local mergedChat, highestChatSeq = mergeChatLog(prevState.chatLog, nextState.chatLog)
+    nextState.chatLog = mergedChat
     if (role == "manual" or role == "solo") and nextState.manual == nil and prevState.manual ~= nil then
         nextState.manual = prevState.manual
     end
@@ -3243,6 +3290,10 @@ local function applyState(ent, role, state, isOpen)
 
     frame._role = role
     frame._state = nextState
+    if highestChatSeq and highestChatSeq > (frame._chatAckedSeq or 0) then
+        frame._chatAckedSeq = highestChatSeq
+        sendAction(ent, "chat_ack", {seq = highestChatSeq}, 0.05, "chat_ack")
+    end
     updateHeader(frame)
     updateChat(frame)
 

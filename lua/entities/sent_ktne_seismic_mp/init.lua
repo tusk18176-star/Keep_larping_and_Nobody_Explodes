@@ -1196,6 +1196,7 @@ function ENT:SanitizeActionData(action, data)
     if data.index ~= nil then safe.index = clampInt(data.index, 0, 64, 0) end
     if data.x ~= nil then safe.x = clampInt(data.x, 0, 64, 0) end
     if data.y ~= nil then safe.y = clampInt(data.y, 0, 64, 0) end
+    if data.seq ~= nil then safe.seq = clampInt(data.seq, 0, 1000000, 0) end
     if data.key ~= nil then safe.key = clampInt(data.key, 0, 64, 0) end
     if data.value ~= nil then safe.value = clampInt(data.value, 0, 999, 0) end
     if data.delta ~= nil then safe.delta = clampInt(data.delta, -999, 999, 0) end
@@ -1309,7 +1310,7 @@ Thank you for playing! :)]])
     net.Start("ktne_open_ui_mp")
         net.WriteEntity(self)
         net.WriteString(role)
-        net.WriteTable(self:GetClientStateFor(role, true))
+        net.WriteTable(self:GetClientStateFor(role, true, nil, ply))
     net.Send(ply)
 end
 
@@ -1328,6 +1329,27 @@ function ENT:PushChatEntry(kind, speaker, text)
     while #self.ChatLog > 80 do
         table.remove(self.ChatLog, 1)
     end
+end
+
+function ENT:GetChatAckKey(ply)
+    if not IsValid(ply) then return nil end
+    local sid = ply.SteamID64 and ply:SteamID64() or nil
+    if sid and sid ~= "" and sid ~= "0" then return sid end
+    return tostring(ply:EntIndex())
+end
+
+function ENT:GetLastChatAck(ply)
+    local key = self:GetChatAckKey(ply)
+    if not key then return 0 end
+    self.ChatAckSeq = self.ChatAckSeq or {}
+    return math.max(0, math.floor(tonumber(self.ChatAckSeq[key] or 0) or 0))
+end
+
+function ENT:SetLastChatAck(ply, seq)
+    local key = self:GetChatAckKey(ply)
+    if not key then return end
+    self.ChatAckSeq = self.ChatAckSeq or {}
+    self.ChatAckSeq[key] = math.max(0, math.floor(tonumber(seq) or 0))
 end
 
 function ENT:CheckCompletionLogs()
@@ -1352,7 +1374,7 @@ function ENT:CheckCompletionLogs()
     return changed
 end
 
-function ENT:GetClientStateFor(role, includeStatic, syncFlags)
+function ENT:GetClientStateFor(role, includeStatic, syncFlags, ply)
     syncFlags = syncFlags or {}
     local includeDynamic = includeStatic or syncFlags.dynamic == true
     local includeChat = includeStatic or syncFlags.chat == true
@@ -1383,7 +1405,17 @@ function ENT:GetClientStateFor(role, includeStatic, syncFlags)
         state.pkbControl = deepCopy(self.PKB or {active = false, phase = "idle", timer = 0, colors = {}, connections = {}, blocked = {}, completed = {}, completedPaths = {}, dragVisited = {}, lastDragKey = nil})
     end
     if includeChat then
-        state.chatLog = deepCopy(self.ChatLog or {})
+        if includeStatic then
+            state.chatLog = deepCopy(self.ChatLog or {})
+        else
+            local lastAck = self:GetLastChatAck(ply)
+            state.chatLog = {}
+            for _, entry in ipairs(self.ChatLog or {}) do
+                if math.floor(tonumber(entry and entry.seq or 0) or 0) > lastAck then
+                    state.chatLog[#state.chatLog + 1] = deepCopy(entry)
+                end
+            end
+        end
     end
 
     local function attachPanelModules()
@@ -1592,6 +1624,11 @@ function ENT:HandlePanelAction(ply, action, data)
         return
     elseif action == "leave_bomb" then
         self:ReleasePlayer(ply)
+        return
+    elseif action == "chat_ack" then
+        if self:IsPanelUser(ply) or self:IsManualUser(ply) then
+            self:SetLastChatAck(ply, data and data.seq)
+        end
         return
     end
 
@@ -2223,7 +2260,7 @@ function ENT:SyncState(force, syncFlags)
         net.Start("ktne_sync_state_mp")
             net.WriteEntity(self)
             net.WriteString(role)
-            net.WriteTable(self:GetClientStateFor(role, includeStatic, syncFlags))
+            net.WriteTable(self:GetClientStateFor(role, includeStatic, syncFlags, ply))
         net.Send(ply)
     end
 end
