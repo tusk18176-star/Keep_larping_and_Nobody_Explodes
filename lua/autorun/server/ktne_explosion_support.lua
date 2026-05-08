@@ -574,7 +574,7 @@ local function createDetonationCloud(origin, renderColor, renderAmt)
     end)
 end
 
-local function updatePlayerSirenPatches(ent, state)
+local function updatePlayerSirenPatches(ent, state, targetPlayers)
     state.playerSirenPatches = state.playerSirenPatches or {}
     if not state.profile.sirenSound or state.profile.sirenSound == "" then
         for ply, sirenState in pairs(state.playerSirenPatches) do
@@ -584,7 +584,7 @@ local function updatePlayerSirenPatches(ent, state)
         return
     end
     local now = CurTime()
-    local targetPlayers = getAffectedPlayersForState(ent, state)
+    targetPlayers = targetPlayers or getAffectedPlayersForState(ent, state)
     local shouldHear = {}
 
     for _, ply in ipairs(targetPlayers) do
@@ -735,7 +735,7 @@ local function finalizeInevitable(ent, state)
     end)
 end
 
-hook.Add("Think", "KTNE_ExplosionSupport_Think", function()
+timer.Create("KTNE_ExplosionTick", 0.25, 0, function()
     local now = CurTime()
     local desiredFocus = {}
 
@@ -769,7 +769,8 @@ hook.Add("Think", "KTNE_ExplosionSupport_Think", function()
         elseif now >= state.deadline then
             finalizeInevitable(ent, state)
         else
-            for _, ply in ipairs(getAffectedPlayersForState(ent, state)) do
+            local affectedPlayers = getAffectedPlayersForState(ent, state)
+            for _, ply in ipairs(affectedPlayers) do
                 if IsValid(ply) and ply:IsPlayer() and ply:Alive() then
                     local current = desiredFocus[ply]
                     if not current or state.deadline < current.deadline then
@@ -777,7 +778,7 @@ hook.Add("Think", "KTNE_ExplosionSupport_Think", function()
                     end
                 end
             end
-            updatePlayerSirenPatches(ent, state)
+            updatePlayerSirenPatches(ent, state, affectedPlayers)
         end
     end
 
