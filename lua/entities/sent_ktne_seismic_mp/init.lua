@@ -1032,6 +1032,39 @@ local function sid64(ply)
     return IsValid(ply) and (ply:SteamID64() or "") or ""
 end
 
+local MAX_ACTION_MSG_BITS = 8192
+local DEFAULT_ACTION_COOLDOWN = 0.05
+local ACTION_COOLDOWNS = {
+    debug_start_role = 0.25,
+    leave_bomb = 0.25,
+    chat_message = 0.35,
+    identify_bomb = 0.2,
+    radio_hold = 0.05,
+    seismic_press = 0.08,
+    thermo_set = 0.05,
+    tamper_connect = 0.08,
+    memory_press = 0.08,
+    pkb_begin = 0.15,
+    pkb_hover = 0.02,
+    pkb_release = 0.05,
+    reactor_code = 0.25,
+    reactor_clear = 0.05,
+    drill_code = 0.25,
+    drill_cut = 0.08,
+    override_toggle = 0.08,
+    override_check = 0.15,
+    calibration_start = 0.15,
+    calibration_press = 0.08,
+    interrupt_start = 0.15,
+    interrupt_click = 0.05,
+    twin_cut = 0.08,
+}
+
+local function clampInt(value, minValue, maxValue, defaultValue)
+    local num = math.floor(tonumber(value or defaultValue) or defaultValue or 0)
+    return math.Clamp(num, minValue, maxValue)
+end
+
 function ENT:IsPanelUser(ply)
     if not IsValid(ply) then return false end
     return ply == self.PanelPlayer
@@ -1123,6 +1156,58 @@ function ENT:ReleasePlayer(ply, opts)
 
     self:SyncState(true)
     return true
+end
+
+function ENT:IsActionRateLimited(ply, action)
+    if not IsValid(ply) then return true end
+
+    self._actionThrottle = self._actionThrottle or {}
+    local key = sid64(ply) .. ":" .. tostring(action or "")
+    local now = CurTime()
+    local nextAllowed = self._actionThrottle[key] or 0
+    if nextAllowed > now then
+        return true
+    end
+
+    self._actionThrottle[key] = now + (ACTION_COOLDOWNS[action] or DEFAULT_ACTION_COOLDOWN)
+    return false
+end
+
+function ENT:SanitizeActionData(action, data)
+    if not istable(data) then return {} end
+
+    local safe = {}
+    if data.index ~= nil then safe.index = clampInt(data.index, 0, 64, 0) end
+    if data.x ~= nil then safe.x = clampInt(data.x, 0, 64, 0) end
+    if data.y ~= nil then safe.y = clampInt(data.y, 0, 64, 0) end
+    if data.key ~= nil then safe.key = clampInt(data.key, 0, 64, 0) end
+    if data.value ~= nil then safe.value = clampInt(data.value, 0, 999, 0) end
+    if data.delta ~= nil then safe.delta = clampInt(data.delta, -999, 999, 0) end
+    if data.holding ~= nil then safe.holding = data.holding == true end
+
+    if data.text ~= nil then
+        safe.text = string.sub(tostring(data.text or ""):gsub("[%c]+", " "), 1, 256)
+    end
+    if data.make ~= nil then
+        safe.make = string.sub(string.upper(tostring(data.make or "")), 1, 32)
+    end
+    if data.role ~= nil then
+        local role = tostring(data.role or "")
+        safe.role = role == "manual" and "manual" or "panel"
+    end
+    if data.channel ~= nil then
+        local channel = tostring(data.channel or "")
+        safe.channel = channel == "exhaust" and "exhaust" or "coolant"
+    end
+    if data.code ~= nil then
+        safe.code = string.sub(tostring(data.code or ""), 1, 32)
+    end
+    if data.color ~= nil then safe.color = string.sub(tostring(data.color or ""), 1, 32) end
+    if data.source ~= nil then safe.source = string.sub(tostring(data.source or ""), 1, 32) end
+    if data.receiver ~= nil then safe.receiver = string.sub(tostring(data.receiver or ""), 1, 32) end
+    if data.symbol ~= nil then safe.symbol = string.sub(tostring(data.symbol or ""), 1, 32) end
+
+    return safe
 end
 
 function ENT:OpenDebugPickerFor(ply)
@@ -1479,6 +1564,9 @@ end
 
 
 function ENT:HandlePanelAction(ply, action, data)
+    data = self:SanitizeActionData(action, data)
+    if self:IsActionRateLimited(ply, action) then return end
+
     if action == "debug_start_role" then
         self:StartDebugGameFor(ply, tostring((data and data.role) or "panel"))
         return
@@ -2084,7 +2172,8 @@ elseif action == "override_toggle" then
     end
 end
 
-net.Receive("ktne_action_mp", function(_, ply)
+net.Receive("ktne_action_mp", function(len, ply)
+    if len > MAX_ACTION_MSG_BITS then return end
     local ent = net.ReadEntity()
     local action = net.ReadString()
     local data = net.ReadTable() or {}
@@ -2343,6 +2432,8 @@ function ENT:SpawnFunction(ply, tr, class)
     ent:Activate()
     return ent
 end
+
+
 
 
 

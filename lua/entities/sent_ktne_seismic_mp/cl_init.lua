@@ -465,17 +465,14 @@ end
 local ktneUiHooksEnabled = false
 local KTNE_INPUT_HOOK_ID = "KTNE_Bomb_InputLock_" .. string.gsub((debug.getinfo(1, "S").short_src or tostring({})), "%W", "_")
 local KTNE_MOVE_BUTTONS = {
-    IN_FORWARD, IN_BACK, IN_MOVELEFT, IN_MOVERIGHT, IN_JUMP, IN_DUCK, IN_SPEED, IN_WALK,
+    IN_FORWARD, IN_BACK, IN_MOVELEFT, IN_MOVERIGHT, IN_JUMP, IN_DUCK, IN_SPEED, IN_WALK, IN_USE,
 }
-local KTNE_MOVEMENT_BINDS = {
-    ["+forward"] = true, ["-forward"] = true,
-    ["+back"] = true, ["-back"] = true,
-    ["+moveleft"] = true, ["-moveleft"] = true,
-    ["+moveright"] = true, ["-moveright"] = true,
-    ["+jump"] = true, ["-jump"] = true,
-    ["+duck"] = true, ["-duck"] = true,
-    ["+speed"] = true, ["-speed"] = true,
-    ["+walk"] = true, ["-walk"] = true,
+local KTNE_BLOCKED_BINDS = {
+    ["+use"] = true,
+    ["-use"] = true,
+    ["gm_showhelp"] = true,
+    ["gm_showspare1"] = true,
+    ["gm_showspare2"] = true,
 }
 
 local function ktneIsPushToTalkBind(bind)
@@ -518,23 +515,14 @@ local function ktneSetUiHooksEnabled(enabled)
 
         hook.Add("PlayerBindPress", KTNE_INPUT_HOOK_ID .. "_Bind", function(_, bind)
             if not ktneHasActiveMinigameFrame() then return end
-            if ktneIsPushToTalkBind(bind) then return end
-            return true
-        end)
-
-        hook.Add("StartChat", KTNE_INPUT_HOOK_ID .. "_ChatBlock", function()
-            if ktneHasActiveMinigameFrame() then
+            local lower = string.lower(tostring(bind or ""))
+            if ktneIsPushToTalkBind(lower) then return end
+            if KTNE_BLOCKED_BINDS[lower] then
                 return true
             end
         end)
 
         hook.Add("OnContextMenuOpen", KTNE_INPUT_HOOK_ID .. "_ContextBlock", function()
-            if ktneHasActiveMinigameFrame() then
-                return false
-            end
-        end)
-
-        hook.Add("OnSpawnMenuOpen", KTNE_INPUT_HOOK_ID .. "_SpawnBlock", function()
             if ktneHasActiveMinigameFrame() then
                 return false
             end
@@ -556,9 +544,7 @@ local function ktneSetUiHooksEnabled(enabled)
             timer.Remove("KTNE_Bomb_UIWatch_REWORK")
         end
         hook.Remove("PlayerBindPress", KTNE_INPUT_HOOK_ID .. "_Bind")
-        hook.Remove("StartChat", KTNE_INPUT_HOOK_ID .. "_ChatBlock")
         hook.Remove("OnContextMenuOpen", KTNE_INPUT_HOOK_ID .. "_ContextBlock")
-        hook.Remove("OnSpawnMenuOpen", KTNE_INPUT_HOOK_ID .. "_SpawnBlock")
         hook.Remove("CreateMove", KTNE_INPUT_HOOK_ID .. "_Move")
     end
 end
