@@ -8,6 +8,11 @@ local actionCooldowns = actionCooldowns or {}
 local purgeInvalid
 local ktneSetUiHooksEnabled
 
+local function ktneUiWatchTimerName(ent)
+    if not IsValid(ent) then return nil end
+    return "KTNE_Bomb_UIWatch_REWORK_" .. tostring(ent:EntIndex())
+end
+
 local function ktneRefreshScreenClicker()
     local anyActive = false
     for ent, fr in pairs(activeFrames) do
@@ -435,6 +440,10 @@ getColor = function(name) return colorMap[name] or Color(70, 140, 170) end
 local function textColorFor(name) return color_white end
 
 local function closeFrameForBomb(ent, suppress)
+    local timerName = ktneUiWatchTimerName(ent)
+    if timerName and timer.Exists(timerName) then
+        timer.Remove(timerName)
+    end
     if suppress then hiddenFrames[ent] = true end
     if not suppress then
         stopAllTensionTracks()
@@ -506,12 +515,6 @@ local function ktneSetUiHooksEnabled(enabled)
     ktneUiHooksEnabled = enabled
 
     if enabled then
-        timer.Create("KTNE_Bomb_UIWatch_REWORK", 1, 0, function()
-            if purgeInvalid then
-                purgeInvalid()
-            end
-        end)
-
         hook.Add("PlayerBindPress", KTNE_INPUT_HOOK_ID .. "_Bind", function(_, bind)
             if not ktneHasActiveMinigameFrame() then return end
             local lower = string.lower(tostring(bind or ""))
@@ -539,9 +542,7 @@ local function ktneSetUiHooksEnabled(enabled)
             cmd:SetButtons(buttons)
         end)
     else
-        if timer.Exists("KTNE_Bomb_UIWatch_REWORK") then
-            timer.Remove("KTNE_Bomb_UIWatch_REWORK")
-        end
+
         hook.Remove("PlayerBindPress", KTNE_INPUT_HOOK_ID .. "_Bind")
         hook.Remove("OnContextMenuOpen", KTNE_INPUT_HOOK_ID .. "_ContextBlock")
         hook.Remove("CreateMove", KTNE_INPUT_HOOK_ID .. "_Move")
@@ -903,6 +904,14 @@ local function makeFrame(ent)
     end
 
     activeFrames[ent] = frame
+    local timerName = ktneUiWatchTimerName(ent)
+    if timerName then
+        timer.Create(timerName, 1, 0, function()
+            if purgeInvalid then
+                purgeInvalid()
+            end
+        end)
+    end
     ktneRefreshScreenClicker()
     return frame
 end
@@ -3297,6 +3306,7 @@ function ENT:Draw()
         draw.SimpleText("Holo-panel styling active. Six live modules installed.", "KTNE_Small", 0, 44, THEME.text, TEXT_ALIGN_CENTER)
     cam.End3D2D()
 end
+
 
 
 
