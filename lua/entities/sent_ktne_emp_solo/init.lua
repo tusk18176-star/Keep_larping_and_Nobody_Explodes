@@ -1024,6 +1024,7 @@ end
 
 local MAX_ACTION_MSG_BITS = 8192
 local DEFAULT_ACTION_COOLDOWN = 0.05
+local PLAYER_SLOT_IDLE_TIMEOUT = 120
 local ACTION_COOLDOWNS = {
     leave_bomb = 0.25,
     chat_message = 0.35,
@@ -1063,6 +1064,39 @@ function ENT:GetJoinedCount()
     return IsValid(self.PanelPlayer) and 1 or 0
 end
 
+function ENT:TouchPlayerActivity(ply)
+    local sid = sid64(ply)
+    if sid == "" then return end
+    self._playerActivity = self._playerActivity or {}
+    self._playerActivity[sid] = CurTime()
+end
+
+function ENT:ClearPlayerActivityBySID(sid)
+    sid = tostring(sid or "")
+    if sid == "" then return end
+    self._playerActivity = self._playerActivity or {}
+    self._playerActivity[sid] = nil
+end
+
+function ENT:EvictInactivePlayers()
+    local sid = tostring(self:GetPanelPlySID() or "")
+    if sid == "" then return end
+
+    self._playerActivity = self._playerActivity or {}
+    local last = self._playerActivity[sid] or 0
+    if last <= 0 or (CurTime() - last) < PLAYER_SLOT_IDLE_TIMEOUT then return end
+
+    local ply = self.PanelPlayer
+    if self:ReleasePlayerBySID(sid) then
+        if IsValid(ply) then
+            net.Start("ktne_close_ui_solo")
+                net.WriteEntity(self)
+            net.Send(ply)
+        end
+        self:SyncState(true)
+    end
+end
+
 function ENT:AssignPlayer(ply)
     if not IsValid(self.PanelPlayer) then
         self.PanelPlayer = ply
@@ -1070,8 +1104,10 @@ function ENT:AssignPlayer(ply)
         local sid = ply:SteamID64() or ""
         self:SetPanelPlySID(sid)
         self:SetManualPlySID(sid)
+        self:TouchPlayerActivity(ply)
         return "solo"
     elseif ply == self.PanelPlayer then
+        self:TouchPlayerActivity(ply)
         return "solo"
     end
 end
@@ -1099,6 +1135,7 @@ function ENT:ReleasePlayerBySID(sid)
     self.ManualPlayer = nil
     self:SetPanelPlySID("")
     self:SetManualPlySID("")
+    self:ClearPlayerActivityBySID(sid)
     return true
 end
 
@@ -1173,6 +1210,7 @@ function ENT:Use(activator)
     if self.RoundEnding then return end
 
     self:UnassignInvalidPlayers()
+    self:EvictInactivePlayers()
     local role = self:AssignPlayer(activator)
     if not role then
         activator:ChatPrint("This EMP bomb is already in use by another player.")
@@ -1190,6 +1228,7 @@ end
 
 function ENT:OpenUIFor(ply)
     if not IsValid(ply) then return end
+    self:TouchPlayerActivity(ply)
     local role = (ply == self.PanelPlayer and ply == self.ManualPlayer) and "solo" or ((ply == self.PanelPlayer) and "panel" or ((ply == self.ManualPlayer) and "manual" or "spectator"))
     if math.random(1, 100) == 1 then
         self:PushChatEntry("dev", "SYSTEM", [[Addon made by Tusk
@@ -1498,6 +1537,7 @@ function ENT:HandlePanelAction(ply, action, data)
     if not self:GetGameActive() then return end
     if action == "chat_message" then
         if ply ~= self.PanelPlayer and ply ~= self.ManualPlayer then return end
+        self:TouchPlayerActivity(ply)
         local text = tostring((data and data.text) or ""):gsub("[%c]+", " "):gsub("^%s+", ""):gsub("%s+$", "")
         if text == "" then return end
         self:PushChatEntry("chat", "Primary", text)
@@ -1509,6 +1549,8 @@ function ENT:HandlePanelAction(ply, action, data)
     else
         if ply ~= self.PanelPlayer then return end
     end
+
+    self:TouchPlayerActivity(ply)
 
     if action == "identify_bomb" then
         local guess = string.upper(tostring(data.make or ""))

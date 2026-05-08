@@ -1034,6 +1034,7 @@ end
 
 local MAX_ACTION_MSG_BITS = 8192
 local DEFAULT_ACTION_COOLDOWN = 0.05
+local PLAYER_SLOT_IDLE_TIMEOUT = 120
 local ACTION_COOLDOWNS = {
     debug_start_role = 0.25,
     leave_bomb = 0.25,
@@ -1090,18 +1091,64 @@ function ENT:GetJoinedCount()
     return n
 end
 
+function ENT:TouchPlayerActivity(ply)
+    local sid = sid64(ply)
+    if sid == "" then return end
+    self._playerActivity = self._playerActivity or {}
+    self._playerActivity[sid] = CurTime()
+end
+
+function ENT:ClearPlayerActivityBySID(sid)
+    sid = tostring(sid or "")
+    if sid == "" then return end
+    self._playerActivity = self._playerActivity or {}
+    self._playerActivity[sid] = nil
+end
+
+function ENT:EvictInactivePlayers()
+    local activity = self._playerActivity or {}
+    local now = CurTime()
+    local stalePlayers = {}
+
+    for _, ply in ipairs({self.PanelPlayer, self.ManualPlayer}) do
+        local sid = sid64(ply)
+        local last = activity[sid] or 0
+        if sid ~= "" and last > 0 and (now - last) >= PLAYER_SLOT_IDLE_TIMEOUT then
+            stalePlayers[sid] = ply
+        end
+    end
+
+    local changed = false
+    for sid, ply in pairs(stalePlayers) do
+        changed = self:ReleasePlayerBySID(sid) or changed
+        if IsValid(ply) then
+            net.Start("ktne_close_ui_mp")
+                net.WriteEntity(self)
+            net.Send(ply)
+        end
+    end
+
+    if changed then
+        self:SyncState(true)
+    end
+end
+
 function ENT:AssignPlayer(ply)
     if not IsValid(self.PanelPlayer) then
         self.PanelPlayer = ply
         self:SetPanelPlySID(ply:SteamID64() or "")
+        self:TouchPlayerActivity(ply)
         return "panel"
     elseif not IsValid(self.ManualPlayer) and ply ~= self.PanelPlayer then
         self.ManualPlayer = ply
         self:SetManualPlySID(ply:SteamID64() or "")
+        self:TouchPlayerActivity(ply)
         return "manual"
     elseif self:IsPanelUser(ply) then
+        self:TouchPlayerActivity(ply)
         return "panel"
     elseif self:IsManualUser(ply) then
+        self:TouchPlayerActivity(ply)
         return "manual"
     end
 end
@@ -1139,6 +1186,10 @@ function ENT:ReleasePlayerBySID(sid)
         self.DebugTestRole = nil
         self.DebugTestSID = nil
         changed = true
+    end
+
+    if changed then
+        self:ClearPlayerActivityBySID(sid)
     end
 
     return changed
@@ -1235,6 +1286,7 @@ function ENT:StartDebugGameFor(ply, role)
     self.ManualPlayer = ply
     self:SetPanelPlySID(self.DebugTestSID)
     self:SetManualPlySID(self.DebugTestSID)
+    self:TouchPlayerActivity(ply)
 
     if not self:GetGameActive() then
         self:StartGame()
@@ -1249,6 +1301,7 @@ function ENT:Use(activator)
     if self.RoundEnding then return end
 
     self:UnassignInvalidPlayers()
+    self:EvictInactivePlayers()
     if (self.KTNEDebugOnePlayer == true or self:GetNWBool("KTNE_DebugOnePlayer", false) == true) and (not self:GetGameActive() or self.DebugOnePlayerActive) then
         self:OpenDebugPickerFor(activator)
         return
@@ -1274,6 +1327,7 @@ end
 
 function ENT:OpenUIFor(ply)
     if not IsValid(ply) then return end
+    self:TouchPlayerActivity(ply)
     local role = self:GetPlayerRole(ply)
     if math.random(1, 100) == 1 then
         self:PushChatEntry("dev", "SYSTEM", [[Addon made by Tusk
@@ -1579,6 +1633,7 @@ function ENT:HandlePanelAction(ply, action, data)
     if not self:GetGameActive() then return end
     if action == "chat_message" then
         if not (self:IsPanelUser(ply) or self:IsManualUser(ply)) then return end
+        self:TouchPlayerActivity(ply)
         local text = tostring((data and data.text) or ""):gsub("[%c]+", " "):gsub("^%s+", ""):gsub("%s+$", "")
         if text == "" then return end
         local speaker = self:IsPanelUser(ply) and "Primary" or "Secondary"
@@ -1591,6 +1646,8 @@ function ENT:HandlePanelAction(ply, action, data)
     elseif not self:IsPanelUser(ply) then
         return
     end
+
+    self:TouchPlayerActivity(ply)
 
     if action == "identify_bomb" then
         local guess = string.upper(tostring(data.make or ""))
