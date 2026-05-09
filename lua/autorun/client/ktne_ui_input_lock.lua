@@ -74,6 +74,15 @@ local function ktneCloseActiveUi()
     return ctx.closeActiveUi() == true
 end
 
+local function ktneCloseActiveUiForLifecycle()
+    local live = ktneHasLiveBombUi()
+    if not live then
+        return false
+    end
+    gui.HideGameUI()
+    return ktneCloseActiveUi()
+end
+
 hook.Add("PlayerBindPress", "KTNE_ClientUiInput_Bind", function(_, bind)
     local live = ktneHasLiveBombUi()
     if not live then
@@ -99,6 +108,12 @@ hook.Add("Think", "KTNE_ClientUiInput_EscClose", function()
         return
     end
 
+    if not ply:Alive() then
+        ktneEscWasDown = false
+        ktneCloseActiveUiForLifecycle()
+        return
+    end
+
     local live, ctx, fr, ent = ktneHasLiveBombUi()
     if not live then
         ktneEscWasDown = false
@@ -113,4 +128,14 @@ hook.Add("Think", "KTNE_ClientUiInput_EscClose", function()
         ktneCloseActiveUi()
     end
     ktneEscWasDown = escDown == true
+end)
+
+hook.Add("PlayerSpawn", "KTNE_ClientUiInput_SpawnClose", function(ply)
+    local localPly = LocalPlayer()
+    if not IsValid(localPly) or ply ~= localPly then
+        return
+    end
+    timer.Simple(0, function()
+        ktneCloseActiveUiForLifecycle()
+    end)
 end)
