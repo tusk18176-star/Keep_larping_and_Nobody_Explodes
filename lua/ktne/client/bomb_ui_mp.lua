@@ -516,17 +516,8 @@ local function purgeInvalid()
     ktneRefreshScreenClicker()
 end
 local ktneUiHooksEnabled = false
+local ktneEscWasDown = false
 local KTNE_INPUT_HOOK_ID = "KTNE_Bomb_InputLock_" .. string.gsub((debug.getinfo(1, "S").short_src or tostring({})), "%W", "_")
-local KTNE_MOVE_BUTTONS = {
-    IN_FORWARD, IN_BACK, IN_MOVELEFT, IN_MOVERIGHT, IN_JUMP, IN_DUCK, IN_SPEED, IN_WALK, IN_USE,
-}
-local KTNE_BLOCKED_BINDS = {
-    ["+use"] = true,
-    ["-use"] = true,
-    ["gm_showhelp"] = true,
-    ["gm_showspare1"] = true,
-    ["gm_showspare2"] = true,
-}
 
 local function ktneIsPushToTalkBind(bind)
     local lower = string.lower(tostring(bind or ""))
@@ -564,9 +555,7 @@ local function ktneSetUiHooksEnabled(enabled)
             if not ktneHasActiveMinigameFrame() then return end
             local lower = string.lower(tostring(bind or ""))
             if ktneIsPushToTalkBind(lower) then return end
-            if KTNE_BLOCKED_BINDS[lower] then
-                return true
-            end
+            return true
         end)
 
         hook.Add("OnContextMenuOpen", KTNE_INPUT_HOOK_ID .. "_ContextBlock", function()
@@ -575,42 +564,25 @@ local function ktneSetUiHooksEnabled(enabled)
             end
         end)
 
-        hook.Add("CreateMove", KTNE_INPUT_HOOK_ID .. "_Move", function(cmd)
-            if not ktneHasActiveMinigameFrame() then return end
-            cmd:SetForwardMove(0)
-            cmd:SetSideMove(0)
-            cmd:SetUpMove(0)
-            local buttons = cmd:GetButtons()
-            for _, button in ipairs(KTNE_MOVE_BUTTONS) do
-                buttons = bit.band(buttons, bit.bnot(button))
+        hook.Add("Think", KTNE_INPUT_HOOK_ID .. "_EscClose", function()
+            local hasActive = ktneHasActiveMinigameFrame()
+            local escDown = hasActive and input.IsKeyDown(KEY_ESCAPE)
+            if escDown and not ktneEscWasDown then
+                for ent, fr in pairs(activeFrames) do
+                    if IsValid(ent) and IsValid(fr) and not fr._closing and (not fr.IsVisible or fr:IsVisible()) then
+                        sendAction(ent, "leave_bomb")
+                        closeFrameForBomb(ent, true)
+                        break
+                    end
+                end
             end
-            cmd:SetButtons(buttons)
-        end)
-
-        hook.Add("SetupMove", KTNE_INPUT_HOOK_ID .. "_SetupMove", function(ply, mv, cmd)
-            if ply ~= LocalPlayer() then return end
-            if not ktneHasActiveMinigameFrame() then return end
-            mv:SetForwardSpeed(0)
-            mv:SetSideSpeed(0)
-            mv:SetUpSpeed(0)
-            local buttons = mv:GetButtons()
-            for _, button in ipairs(KTNE_MOVE_BUTTONS) do
-                buttons = bit.band(buttons, bit.bnot(button))
-            end
-            mv:SetButtons(buttons)
-            if cmd then
-                cmd:SetForwardMove(0)
-                cmd:SetSideMove(0)
-                cmd:SetUpMove(0)
-                cmd:SetButtons(buttons)
-            end
+            ktneEscWasDown = escDown == true
         end)
     else
-
+        ktneEscWasDown = false
         hook.Remove("PlayerBindPress", KTNE_INPUT_HOOK_ID .. "_Bind")
         hook.Remove("OnContextMenuOpen", KTNE_INPUT_HOOK_ID .. "_ContextBlock")
-        hook.Remove("CreateMove", KTNE_INPUT_HOOK_ID .. "_Move")
-        hook.Remove("SetupMove", KTNE_INPUT_HOOK_ID .. "_SetupMove")
+        hook.Remove("Think", KTNE_INPUT_HOOK_ID .. "_EscClose")
     end
 end
 
