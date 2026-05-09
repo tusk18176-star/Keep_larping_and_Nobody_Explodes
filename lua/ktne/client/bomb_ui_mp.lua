@@ -565,6 +565,11 @@ local function ktneSetUiHooksEnabled(enabled)
         end)
 
         hook.Add("Think", KTNE_INPUT_HOOK_ID .. "_EscClose", function()
+            local ply = LocalPlayer()
+            if not IsValid(ply) then
+                ktneEscWasDown = false
+                return
+            end
             local hasActive = ktneHasActiveMinigameFrame()
             local escDown = hasActive and input.IsKeyDown(KEY_ESCAPE)
             if escDown and not ktneEscWasDown then
@@ -2416,6 +2421,11 @@ local function ensureDatapadLayout(frame)
     local pillars = vgui.Create("EditablePanel", canvas)
     pillars:SetSize(720, 250)
     pillars.Think = function(self)
+        local ply = LocalPlayer()
+        if not (IsValid(ply) and IsValid(frame) and IsValid(frame._ent) and IsValid(canvas)) then
+            self:SetVisible(false)
+            return
+        end
         local pw, ph = canvas:GetWide(), canvas:GetTall()
         self:SetPos(math.floor((pw - self:GetWide()) * 0.5), math.floor(ph * 0.36))
     end
@@ -2426,6 +2436,15 @@ local function ensureDatapadLayout(frame)
     local pkbGrid = vgui.Create("EditablePanel", canvas)
     pkbGrid:SetSize(816, 340)
     pkbGrid.Think = function(self)
+        local ply = LocalPlayer()
+        if not (IsValid(ply) and IsValid(frame) and IsValid(frame._ent) and IsValid(canvas)) then
+            self:SetVisible(false)
+            if IsValid(frame.DatapadPillars) then frame.DatapadPillars:SetVisible(false) end
+            frame._pkbDraggingColor = nil
+            frame._pkbHoveredCell = nil
+            frame._pkbLocalVisited = nil
+            return
+        end
         local pw, ph = canvas:GetWide(), canvas:GetTall()
         self:SetPos(math.floor((pw - self:GetWide()) * 0.5), math.floor(ph * 0.30))
         local pkb = (frame._state and frame._state.pkbControl) or {active = false}
@@ -2573,6 +2592,13 @@ local function ensureDatapadLayout(frame)
     hold._holding = false
     hold._nextHoldPing = 0
     hold.Think = function(self)
+        local ply = LocalPlayer()
+        if not (IsValid(ply) and IsValid(frame) and IsValid(frame._ent) and IsValid(canvas)) then
+            self._holding = false
+            self:SetVisible(false)
+            self:SetEnabled(false)
+            return
+        end
         local seal = (frame._state and frame._state.radioactiveSeal) or {active = false}
         local seismic = (frame._state and frame._state.seismicControl) or {active = false}
         local pkb = (frame._state and frame._state.pkbControl) or {active = false}
