@@ -32,7 +32,7 @@ hook.Add("HUDPaint", "KTNE_InevitableWarningHUD", function()
     local w, h = ScrW(), ScrH()
     local boxW, boxH = math.min(620, w - 60), 118
     local x = (w - boxW) * 0.5
-    local y = h - boxH - 64
+    local y = h - boxH - 136
     local duration = INEVITABLE_DURATIONS[mode] or 90
     local darkenFrac = math.Clamp((timeLeft - 15) / math.max(duration - 15, 1), 0, 1)
     local redValue = math.floor(Lerp(darkenFrac, 0, 140))
@@ -45,16 +45,10 @@ hook.Add("HUDPaint", "KTNE_InevitableWarningHUD", function()
     local blackOutline = Color(math.max(24, math.floor(borderValue * 0.2)), 0, 0, 245)
     local fill = flicker and redFill or blackFill
     local outline = flicker and redOutline or blackOutline
-    local textColor = mode == "pkb" and Color(10, 10, 10) or Color(math.max(40, math.floor(redValue * 0.7)), 0, 0)
+    local textColor = Color(255, 255, 255)
     if timeLeft <= 15 then
-        textColor = Color(255, 255, 255)
-    end
-    if timeLeft <= 10 then
-        local whiteFill = Color(244, 244, 244, 228)
-        local whiteOutline = Color(255, 255, 255, 245)
-        fill = flicker and whiteFill or blackFill
-        outline = flicker and whiteOutline or Color(20, 20, 20, 245)
-        textColor = flicker and Color(0, 0, 0) or Color(255, 255, 255)
+        fill = blackFill
+        outline = Color(20, 20, 20, 245)
     end
     local title = mode == "pkb" and "WARNING: PKB DETONATION INEVITABLE" or "WARNING: ABBERANT DETONATION INEVITABLE"
 
