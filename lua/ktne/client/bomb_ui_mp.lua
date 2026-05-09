@@ -4,7 +4,13 @@ local hiddenFrames = hiddenFrames or {}
 local actionCooldowns = actionCooldowns or {}
 
 local purgeInvalid
-local ktneSetUiHooksEnabled
+local ktneRefreshKeyboardOwner
+local refreshInlineKeyboardState
+local KTNE_UI_CONTEXT_ID = (function()
+    local caller = debug.getinfo(2, "S")
+    local src = (caller and caller.short_src) or (debug.getinfo(1, "S").short_src) or tostring({})
+    return string.gsub(src, "%W", "_")
+end)()
 
 local function ktneUiWatchTimerName(ent)
     if not IsValid(ent) then return nil end
@@ -21,8 +27,10 @@ local function ktneRefreshScreenClicker()
             break
         end
     end
-    if ktneSetUiHooksEnabled then ktneSetUiHooksEnabled(anyActive) end
     gui.EnableScreenClicker(anyActive)
+    if ktneRefreshKeyboardOwner then
+        ktneRefreshKeyboardOwner()
+    end
 end
 
 surface.CreateFont("KTNE_Title", {font = "Roboto", size = 30, weight = 700})
@@ -495,6 +503,10 @@ local function closeFrameForBomb(ent, suppress)
     end
     local fr = activeFrames[ent]
     if IsValid(fr) then
+        if IsValid(fr._chatComposer) then
+            fr._chatComposer:Remove()
+            fr._chatComposer = nil
+        end
         fr._closing = true
         fr:Remove()
     end
@@ -515,80 +527,104 @@ local function purgeInvalid()
     end
     ktneRefreshScreenClicker()
 end
-local ktneUiHooksEnabled = false
-local ktneEscWasDown = false
-local KTNE_INPUT_HOOK_ID = "KTNE_Bomb_InputLock_" .. string.gsub((debug.getinfo(1, "S").short_src or tostring({})), "%W", "_")
+local KTNE_MOUSE_BIND_TO_CODE = {
+    mouse1 = MOUSE_LEFT,
+    mouse2 = MOUSE_RIGHT,
+    mouse3 = MOUSE_MIDDLE,
+    mouse4 = MOUSE_4,
+    mouse5 = MOUSE_5,
+}
+local KTNE_DTEXTENTRY_BASE = vgui.GetControlTable("DTextEntry")
+
+local function ktneNormalizeBindingName(bind)
+    local lower = string.lower(string.Trim(tostring(bind or "")))
+    if lower == "" then return "" end
+    lower = string.match(lower, "^[^%s]+") or lower
+    if string.sub(lower, 1, 1) == "+" or string.sub(lower, 1, 1) == "-" then
+        lower = string.sub(lower, 2)
+    end
+    return lower
+end
 
 local function ktneIsPushToTalkBind(bind)
     local lower = string.lower(tostring(bind or ""))
     if lower == "+voicerecord" or lower == "-voicerecord" then return true end
 
-    if input and input.LookupBinding then
-        local pttKey = string.lower(tostring(input.LookupBinding("+voicerecord") or ""))
-        if pttKey ~= "" and (lower == pttKey or lower == "+" .. pttKey or lower == "-" .. pttKey) then
-            return true
+    local pttKey = ktneNormalizeBindingName((input and input.LookupBinding and input.LookupBinding("+voicerecord")) or "")
+    if pttKey ~= "" and (lower == pttKey or lower == "+" .. pttKey or lower == "-" .. pttKey) then
+        return true
+    end
+
+    return false
+end
+
+local function ktneGetPushToTalkBinding()
+    return ktneNormalizeBindingName((input and input.LookupBinding and input.LookupBinding("+voicerecord")) or "")
+end
+
+local function ktneIsPushToTalkHeld()
+    local pttKey = ktneGetPushToTalkBinding()
+    if pttKey == "" then return false end
+
+    local keyResolver = input and input.GetKeyCode
+    if keyResolver then
+        local resolved = keyResolver(pttKey)
+        if isnumber(resolved) and resolved > 0 then
+            return input.IsKeyDown(resolved)
+        end
+    end
+
+    local mouseCode = KTNE_MOUSE_BIND_TO_CODE[pttKey]
+    if mouseCode ~= nil then
+        return input.IsMouseDown(mouseCode)
+    end
+
+    return false
+end
+
+local function ktneHasFocusedTypingEntry()
+    local focus = vgui.GetKeyboardFocus()
+    if not IsValid(focus) then return false end
+
+    for ent, fr in pairs(activeFrames) do
+        if IsValid(ent) and IsValid(fr) and not fr._closing and (not fr.IsVisible or fr:IsVisible()) then
+            if focus == fr.ChatEntry or focus == fr.ReactorEntry or focus == fr.DrillEntry then
+                return true
+            end
+            if IsValid(fr._chatComposer) and focus == fr._chatComposer.Entry then
+                return true
+            end
         end
     end
 
     return false
 end
 
-local function ktneHasActiveMinigameFrame()
-    local anyActive = false
+local function ktneCloseActiveUi()
+    for ent, fr in pairs(activeFrames) do
+        if IsValid(ent) and IsValid(fr) and not fr._closing and (not fr.IsVisible or fr:IsVisible()) then
+            sendAction(ent, "leave_bomb")
+            closeFrameForBomb(ent, true)
+            return true
+        end
+    end
+    return false
+end
+
+local function ktneGetPrimaryActiveFrame()
     for ent, fr in pairs(activeFrames) do
         if (not IsValid(ent)) or (not IsValid(fr)) or fr._closing or (fr.IsVisible and not fr:IsVisible()) then
             activeFrames[ent] = nil
         else
-            anyActive = true
-            break
+            return fr, ent
         end
     end
-    return anyActive
+    return nil, nil
 end
 
-local function ktneSetUiHooksEnabled(enabled)
-    if enabled == ktneUiHooksEnabled then return end
-    ktneUiHooksEnabled = enabled
-
-    if enabled then
-        hook.Add("PlayerBindPress", KTNE_INPUT_HOOK_ID .. "_Bind", function(_, bind)
-            if not ktneHasActiveMinigameFrame() then return end
-            local lower = string.lower(tostring(bind or ""))
-            if ktneIsPushToTalkBind(lower) then return end
-            return true
-        end)
-
-        hook.Add("OnContextMenuOpen", KTNE_INPUT_HOOK_ID .. "_ContextBlock", function()
-            if ktneHasActiveMinigameFrame() then
-                return false
-            end
-        end)
-
-        hook.Add("Think", KTNE_INPUT_HOOK_ID .. "_EscClose", function()
-            local ply = LocalPlayer()
-            if not IsValid(ply) then
-                ktneEscWasDown = false
-                return
-            end
-            local hasActive = ktneHasActiveMinigameFrame()
-            local escDown = hasActive and input.IsKeyDown(KEY_ESCAPE)
-            if escDown and not ktneEscWasDown then
-                for ent, fr in pairs(activeFrames) do
-                    if IsValid(ent) and IsValid(fr) and not fr._closing and (not fr.IsVisible or fr:IsVisible()) then
-                        sendAction(ent, "leave_bomb")
-                        closeFrameForBomb(ent, true)
-                        break
-                    end
-                end
-            end
-            ktneEscWasDown = escDown == true
-        end)
-    else
-        ktneEscWasDown = false
-        hook.Remove("PlayerBindPress", KTNE_INPUT_HOOK_ID .. "_Bind")
-        hook.Remove("OnContextMenuOpen", KTNE_INPUT_HOOK_ID .. "_ContextBlock")
-        hook.Remove("Think", KTNE_INPUT_HOOK_ID .. "_EscClose")
-    end
+local function ktneHasActiveMinigameFrame()
+    local fr = ktneGetPrimaryActiveFrame()
+    return IsValid(fr)
 end
 
 local function openDebugRolePicker(ent, state)
@@ -683,7 +719,12 @@ local function openChatComposer(frame)
     composer.OnRemove = function()
         if IsValid(frame) then
             frame._chatComposer = nil
-            frame:SetKeyboardInputEnabled(false)
+            frame:SetKeyboardInputEnabled((tonumber(frame._ktneInlineFocusCount or 0) or 0) > 0)
+            timer.Simple(0, function()
+                if IsValid(frame) and not IsValid(frame._chatComposer) then
+                    refreshInlineKeyboardState(frame)
+                end
+            end)
         end
     end
 
@@ -773,10 +814,37 @@ local function setInlineEntryFocus(frame, entry, focused)
     local count = tonumber(frame._ktneInlineFocusCount or 0) or 0
     count = count + (focused and 1 or -1)
     frame._ktneInlineFocusCount = math.max(0, count)
-    if not IsValid(frame._chatComposer) then
-        frame:SetKeyboardInputEnabled(frame._ktneInlineFocusCount > 0)
-    end
 end
+
+ktneRefreshKeyboardOwner = function(frame)
+    local target = frame
+    if not IsValid(target) then
+        target = ktneGetPrimaryActiveFrame()
+    end
+    if not IsValid(target) then return end
+    local inlineFocusCount = tonumber(target._ktneInlineFocusCount or 0) or 0
+    target:SetKeyboardInputEnabled(IsValid(target._chatComposer) or inlineFocusCount > 0 or ktneHasFocusedTypingEntry())
+end
+
+refreshInlineKeyboardState = function(frame)
+    if not IsValid(frame) then return end
+    ktneRefreshKeyboardOwner(frame)
+end
+
+local function ktneRegisterUiContext()
+    KTNE_ClientUiState = KTNE_ClientUiState or {contexts = {}}
+    local contexts = KTNE_ClientUiState.contexts
+    local ctx = contexts[KTNE_UI_CONTEXT_ID] or {}
+    ctx.id = KTNE_UI_CONTEXT_ID
+    ctx.getPrimaryActiveFrame = ktneGetPrimaryActiveFrame
+    ctx.hasFocusedTypingEntry = ktneHasFocusedTypingEntry
+    ctx.closeActiveUi = ktneCloseActiveUi
+    ctx.isPushToTalkBind = ktneIsPushToTalkBind
+    ctx.refreshKeyboardOwner = ktneRefreshKeyboardOwner
+    contexts[KTNE_UI_CONTEXT_ID] = ctx
+end
+
+ktneRegisterUiContext()
 
 local function wireInlineCodeEntry(frame, entry, submit)
     if not (IsValid(frame) and IsValid(entry)) then return end
@@ -784,10 +852,11 @@ local function wireInlineCodeEntry(frame, entry, submit)
     entry:SetMouseInputEnabled(true)
     entry.OnMousePressed = function(self, mousecode)
         if mousecode ~= MOUSE_LEFT then return end
-        if IsValid(frame) and not IsValid(frame._chatComposer) then
-            frame:SetKeyboardInputEnabled(true)
-        end
         setInlineEntryFocus(frame, self, true)
+        refreshInlineKeyboardState(frame)
+        if KTNE_DTEXTENTRY_BASE and isfunction(KTNE_DTEXTENTRY_BASE.OnMousePressed) then
+            KTNE_DTEXTENTRY_BASE.OnMousePressed(self, mousecode)
+        end
         self:RequestFocus()
         timer.Simple(0, function()
             if IsValid(self) then
@@ -796,19 +865,14 @@ local function wireInlineCodeEntry(frame, entry, submit)
             end
         end)
     end
-    entry.OnGetFocus = function(self)
-        setInlineEntryFocus(frame, self, true)
+    entry.OnFocusChanged = function(self, gained)
+        setInlineEntryFocus(frame, self, gained == true)
         timer.Simple(0, function()
-            if IsValid(self) then
+            if not IsValid(self) then return end
+            if gained == true then
                 self:RequestFocus()
-            end
-        end)
-    end
-    entry.OnLoseFocus = function(self)
-        setInlineEntryFocus(frame, self, false)
-        timer.Simple(0, function()
-            if IsValid(frame) and not IsValid(frame._chatComposer) and (tonumber(frame._ktneInlineFocusCount or 0) or 0) <= 0 then
-                frame:SetKeyboardInputEnabled(false)
+            else
+                refreshInlineKeyboardState(frame)
             end
         end)
     end
