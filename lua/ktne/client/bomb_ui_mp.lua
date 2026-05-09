@@ -751,6 +751,21 @@ local function openChatComposer(frame)
     end)
 end
 
+local function submitInlineChat(frame, entry)
+    if not (IsValid(frame) and IsValid(entry)) then return end
+    if not IsValid(frame._ent) then return end
+    local txt = string.Trim(tostring(entry:GetValue() or ""))
+    frame._chatDraft = txt
+    if txt == "" then
+        entry:RequestFocus()
+        return
+    end
+    sendAction(frame._ent, "chat_message", {text = txt})
+    frame._chatDraft = ""
+    entry:SetText("")
+    entry:RequestFocus()
+end
+
 local function setInlineEntryFocus(frame, entry, focused)
     if not (IsValid(frame) and IsValid(entry)) then return end
     if entry._ktneInlineFocused == focused then return end
@@ -962,8 +977,7 @@ local function makeFrame(ent)
     frame.ChatEntry:SetFont("KTNE_Body")
     frame.ChatEntry:SetPlaceholderText("Type a message...")
     frame.ChatEntry:SetUpdateOnType(true)
-    frame.ChatEntry:SetEditable(false)
-    frame.ChatEntry:SetCursor("hand")
+    frame.ChatEntry:SetEditable(true)
     frame.ChatEntry:SetTextColor(Color(220, 240, 248))
     frame.ChatEntry:SetCursorColor(THEME.line)
     frame.ChatEntry.Paint = function(self, w, h)
@@ -972,17 +986,19 @@ local function makeFrame(ent)
         surface.DrawOutlinedRect(0, 0, w, h, 1)
         self:DrawTextEntryText(Color(220, 240, 248), color_white, color_white)
     end
-    frame.ChatEntry.OnMousePressed = function(self, mousecode)
-        openChatComposer(frame)
-    end
-    frame.ChatEntry.OnEnter = function(self)
-        openChatComposer(frame)
+    wireInlineCodeEntry(frame, frame.ChatEntry, function()
+        submitInlineChat(frame, frame.ChatEntry)
+    end)
+    frame.ChatEntry.OnValueChange = function(self, val)
+        if IsValid(frame) then
+            frame._chatDraft = tostring(val or "")
+        end
     end
 
     frame.ChatSend = vgui.Create("DButton", frame.ChatHolder)
     frame.ChatSend:SetText("")
     frame.ChatSend.DoClick = function()
-        openChatComposer(frame)
+        submitInlineChat(frame, frame.ChatEntry)
     end
     frame.ChatSend.Paint = function(self, w, h)
         paintHoloButton(self, w, h, "SEND", self:IsHovered() and THEME.line or THEME.lineSoft)
@@ -2779,7 +2795,6 @@ local function ensureManualLayout(frame)
     frame.PageNotes:SetVisible(false)
     frame.PageNotes:SetEditable(false)
     frame.PageNotes:SetCursorColor(Color(0, 0, 0, 0))
-    frame.PageNotes:SetKeyboardInputEnabled(false)
     frame.PageNotes:SetFont("KTNE_Body")
     frame.PageNotes:SetDrawBackground(true)
     frame.PageNotes:SetTextColor(THEME.text)
@@ -2789,9 +2804,6 @@ local function ensureManualLayout(frame)
         surface.SetDrawColor(THEME.lineSoft)
         surface.DrawOutlinedRect(0, 0, w, h, 1)
         self:DrawTextEntryText(THEME.text, THEME.title, THEME.text)
-        if self:GetValue() == "" and not self:HasFocus() then
-            draw.SimpleText("Add future identification notes here...", "KTNE_Body", 10, 10, Color(110, 170, 190), TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP)
-        end
     end
     frame.PageIdentify = vgui.Create("DButton", outer)
     frame.PageIdentify:SetText("")
