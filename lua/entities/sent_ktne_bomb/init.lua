@@ -1379,7 +1379,7 @@ end
 function ENT:SpawnFunction(ply, tr, class)
     if not tr.Hit then return end
     local ent = ents.Create(class)
-    ent:SetPos(tr.HitPos + tr.HitNormal * 18)
+    ent:SetPos(tr.HitPos + tr.HitNormal * 4)
     if IsValid(ply) then
         ent:SetCreator(ply)
         ent.KTNESpawnerSID = tostring(ply:SteamID64() or "")
@@ -1389,6 +1389,7 @@ function ENT:SpawnFunction(ply, tr, class)
     ent:SetNWInt("KTNE_SelectedStartTime", DEFAULT_START_TIME)
     ent:Spawn()
     ent:Activate()
+    ent:DropToFloor()
     return ent
 end
 
