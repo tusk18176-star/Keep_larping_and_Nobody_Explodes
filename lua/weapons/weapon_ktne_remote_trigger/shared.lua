@@ -58,6 +58,38 @@ function SWEP:GetLinkedBomb()
     return nil
 end
 
+function SWEP:ClearLinkedBombMarker(target)
+    if not SERVER then return end
+    if not self:IsValidBomb(target) then return end
+    if target:GetNWEntity("KTNE_RemoteTriggerWeapon") == self then
+        target:SetNWEntity("KTNE_RemoteTriggerWeapon", NULL)
+    end
+end
+
+function SWEP:MarkLinkedBomb(target)
+    if not SERVER then return end
+    if not self:IsValidBomb(target) then return end
+    target:SetNWEntity("KTNE_RemoteTriggerWeapon", self)
+end
+
+function SWEP:SetLinkedBomb(target)
+    if not SERVER then return end
+
+    local previous = self:GetLinkedBomb()
+    if IsValid(previous) and previous ~= target then
+        self:ClearLinkedBombMarker(previous)
+    end
+
+    if self:IsValidBomb(target) then
+        self.LinkedBomb = target
+        self:SetNWEntity("KTNE_LinkedBomb", target)
+        self:MarkLinkedBomb(target)
+    else
+        self.LinkedBomb = nil
+        self:SetNWEntity("KTNE_LinkedBomb", NULL)
+    end
+end
+
 function SWEP:PrimaryAttack()
     self:SetNextPrimaryFire(CurTime() + 0.5)
     if CLIENT then return end
@@ -68,8 +100,7 @@ function SWEP:PrimaryAttack()
         if IsValid(owner) then
             owner:ChatPrint("Remote trigger is not linked to a bomb.")
         end
-        self.LinkedBomb = nil
-        self:SetNWEntity("KTNE_LinkedBomb", NULL)
+        self:SetLinkedBomb(nil)
         return
     end
 
@@ -96,7 +127,12 @@ function SWEP:SecondaryAttack()
         return
     end
 
-    self.LinkedBomb = ent
-    self:SetNWEntity("KTNE_LinkedBomb", ent)
+    self:SetLinkedBomb(ent)
     owner:ChatPrint("Linked remote trigger to " .. (ent.PrintName or ent:GetClass()) .. ".")
+end
+
+function SWEP:OnRemove()
+    if SERVER then
+        self:SetLinkedBomb(nil)
+    end
 end

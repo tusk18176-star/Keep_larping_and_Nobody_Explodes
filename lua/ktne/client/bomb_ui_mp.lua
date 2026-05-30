@@ -3511,16 +3511,22 @@ function ENT:Draw()
     if dist > 300 then return end
 
     cam.Start3D2D(pos, ang, 0.12)
-        draw.RoundedBox(8, -180, -64, 360, 128, Color(6, 20, 30, 220))
+        local remoteLinked = IsValid(self:GetNWEntity("KTNE_RemoteTriggerWeapon"))
+        local panelColor = remoteLinked and Color(72, 10, 10, 230) or Color(6, 20, 30, 220)
+        local payloadColor = remoteLinked and Color(255, 160, 160) or THEME.text
+        draw.RoundedBox(8, -180, -64, 360, 128, panelColor)
         local title = string.upper(tostring(self.PrintName or "BOMB DEVICE"))
         title = title:gsub("%s*%b()", "")
         draw.SimpleText(title, "KTNE_Title", 0, -46, THEME.title, TEXT_ALIGN_CENTER)
         local line1 = self:GetGameActive() and ("Time: " .. self:GetTimeRemaining() .. "s") or "Use to join"
         local line2 = "Players: " .. (((self:GetPanelPlySID() ~= "") and 1 or 0) + ((self:GetManualPlySID() ~= "") and 1 or 0)) .. "/2"
         local payloadLabel = self:GetNWBool("KTNE_DebugOnePlayer", false) and "Training Bomb" or "Live Payload"
+        if remoteLinked then
+            payloadLabel = payloadLabel .. " - Remote Trigger Linked"
+        end
         draw.SimpleText(line1, "KTNE_Body", 0, -10, THEME.amber, TEXT_ALIGN_CENTER)
         draw.SimpleText(line2, "KTNE_Body", 0, 18, Color(132, 224, 255), TEXT_ALIGN_CENTER)
-        draw.SimpleText(payloadLabel, "KTNE_Small", 0, 44, THEME.text, TEXT_ALIGN_CENTER)
+        draw.SimpleText(payloadLabel, "KTNE_Small", 0, 44, payloadColor, TEXT_ALIGN_CENTER)
     cam.End3D2D()
 end
 
