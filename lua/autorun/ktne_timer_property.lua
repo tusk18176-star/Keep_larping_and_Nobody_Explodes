@@ -66,6 +66,7 @@ properties.Add("ktne_set_timer", {
     Action = function(self, ent)
         if not IsValid(ent) then return end
         local defaultTime = KTNE_TIMER_CLASSES[ent:GetClass()] or 300
+        local selectedTime = math.Clamp(math.floor(ent:GetNWInt("KTNE_SelectedStartTime", defaultTime) or defaultTime), 60, 480)
 
         local frame = vgui.Create("DFrame")
         frame:SetTitle("Set Bomb Timer")
@@ -81,14 +82,14 @@ properties.Add("ktne_set_timer", {
         slider:SetMin(60)
         slider:SetMax(480)
         slider:SetDecimals(0)
-        slider:SetValue(defaultTime)
+        slider:SetValue(selectedTime)
         slider.Label:SetText(string.format("Timer (%s default)", formatTimeLabel(defaultTime)))
 
         local valueLabel = vgui.Create("DLabel", frame)
         valueLabel:Dock(TOP)
         valueLabel:DockMargin(12, 6, 12, 0)
         valueLabel:SetTall(20)
-        valueLabel:SetText("Selected: " .. formatTimeLabel(defaultTime))
+        valueLabel:SetText("Selected: " .. formatTimeLabel(selectedTime))
 
         slider.OnValueChanged = function(_, val)
             valueLabel:SetText("Selected: " .. formatTimeLabel(math.Clamp(math.floor(tonumber(val) or defaultTime), 60, 480)))

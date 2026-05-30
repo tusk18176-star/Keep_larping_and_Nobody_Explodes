@@ -80,6 +80,8 @@ local function regenPKBLayout(pkb)
     pkb.lastDragKey = nil
 end
 
+local DEFAULT_START_TIME = 300
+
 function ENT:Initialize()
     self:SetModel("models/weapons/w_swrcdeton.mdl")
     self:PhysicsInit(SOLID_VPHYSICS)

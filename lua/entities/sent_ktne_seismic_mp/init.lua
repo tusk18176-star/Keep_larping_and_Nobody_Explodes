@@ -80,6 +80,8 @@ local function regenPKBLayout(pkb)
     pkb.lastDragKey = nil
 end
 
+local DEFAULT_START_TIME = 210
+
 function ENT:Initialize()
     self:SetModel("models/props/starwars/weapons/seismic_charge.mdl")
     self:PhysicsInit(SOLID_VPHYSICS)
@@ -974,18 +976,24 @@ function ENT:NotifyPlayers(msg)
     self:PushChatEntry("system", "SYSTEM", msg)
 end
 
+function ENT:GetConfiguredStartTime()
+    local selected = self.KTNESelectedStartTime or self:GetNWInt("KTNE_SelectedStartTime", DEFAULT_START_TIME)
+    return math.Clamp(math.floor(tonumber(selected) or DEFAULT_START_TIME), 60, 480)
+end
+
 function ENT:StartGame()
     self.ChatLog = {}
     self.ChatSeq = 0
     self._loggedSolved = {}
     self:GenerateModules()
     self:SetGameActive(true)
-    self:SetTimeRemaining(210)
+    local startTime = self:GetConfiguredStartTime()
+    self:SetTimeRemaining(startTime)
     self:SetStrikes(0)
     self:ClearRoundFlags()
     self._nextSecondTick = CurTime() + 1
     self._nextIdleSync = CurTime() + 1
-    self:NotifyPlayers("Seismic bomb started. Defuse all six visible modules within 3:30.")
+    self:NotifyPlayers("Seismic bomb started. Defuse all six visible modules within " .. formatChatTimeRemaining(startTime) .. ".")
     self:OpenUIFor(self.PanelPlayer)
     self:OpenUIFor(self.ManualPlayer)
     self:SyncState(true)
@@ -1997,6 +2005,13 @@ function ENT:SpawnFunction(ply, tr, class)
     if not tr.Hit then return end
     local ent = ents.Create(class)
     ent:SetPos(tr.HitPos + tr.HitNormal * 4)
+    if IsValid(ply) then
+        ent:SetCreator(ply)
+        ent.KTNESpawnerSID = tostring(ply:SteamID64() or "")
+        ent:SetNWString("KTNE_SpawnerSID", ent.KTNESpawnerSID)
+    end
+    ent.KTNESelectedStartTime = DEFAULT_START_TIME
+    ent:SetNWInt("KTNE_SelectedStartTime", DEFAULT_START_TIME)
     ent:Spawn()
     ent:Activate()
     ent:DropToFloor()

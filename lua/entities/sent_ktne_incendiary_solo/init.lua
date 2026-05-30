@@ -80,6 +80,8 @@ local function regenPKBLayout(pkb)
     pkb.lastDragKey = nil
 end
 
+local DEFAULT_START_TIME = 165
+
 function ENT:Initialize()
     self:SetModel("models/releasepackprops/fuel.mdl")
     self:PhysicsInit(SOLID_VPHYSICS)
